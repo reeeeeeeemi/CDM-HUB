@@ -56,8 +56,10 @@ const TRANSPORT = {
 const TIME_LABEL = { depart: "Heure de départ", arrivee: "Heure d'arrivée sur place" };
 const TIME_SHORT = { depart: "part à", arrivee: "arrive à" };
 // modules par défaut selon le type d'event
-const MODULES_BIG   = { transport: true,  hosting: true,  datePoll: true,  placePoll: false, todos: true, courses: false, comments: true };
-const MODULES_DAILY = { transport: false, hosting: false, datePoll: false, placePoll: true,  todos: true, courses: false, comments: true };
+// Big comme quotidien : rien par défaut, on coche ce dont on a besoin.
+const MODULES_BIG   = { transport: false, hosting: false, datePoll: false, placePoll: false, todos: false, courses: false, comments: false };
+// Un event quotidien part vierge : on ajoute seulement ce dont on a besoin.
+const MODULES_DAILY = { transport: false, hosting: false, datePoll: false, placePoll: false, todos: false, courses: false, comments: false };
 const MODULE_LABELS = [
   ["transport", "Qui y va comment"],
   ["hosting", "Qui peut héberger"],
@@ -67,6 +69,17 @@ const MODULE_LABELS = [
   ["courses", "Liste de courses"],
   ["comments", "Commentaires"],
 ];
+
+// Ce que chaque section apportera à l'event — sert l'aperçu du formulaire.
+const MODULE_META = {
+  transport: { icon: Car,           title: "Qui y va comment ?",  hint: "Chacun dit s'il conduit, cherche une place, ou arrive en train." },
+  hosting:   { icon: BedDouble,     title: "Qui peut héberger ?", hint: "Qui offre des places, qui cherche un lit." },
+  datePoll:  { icon: CalendarClock, title: "Sondage de dates",    hint: "Proposez des créneaux, chacun vote selon ses dispos." },
+  placePoll: { icon: MapPinned,     title: "Sondage de lieu",     hint: "Proposez des endroits avec leur lien Maps, chacun vote." },
+  todos:     { icon: ListTodo,      title: "To-Do",               hint: "Ce qu'il y a à faire, chacun coche ce qu'il prend en charge." },
+  courses:   { icon: ShoppingCart,  title: "Liste de courses",    hint: "Ce qu'il faut acheter, et qui le ramène." },
+  comments:  { icon: MessageSquare, title: "Commentaires",        hint: "Le fil de discussion de l'event." },
+};
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 const normUrl = (u) => (!u ? "" : /^https?:\/\//i.test(u) ? u : "https://" + u);
@@ -234,7 +247,14 @@ export default function App({ me: meFromAuth = null, onSignOut = null, notifyCit
   const delEvent = async (id) => { await saveEvents(events.filter((e) => e.id !== id)); setSelected(null); };
 
   const actions = useMemo(() => ({
-    rsvp: (id, s) => updateEvent(id, (e) => ({ ...e, rsvps: { ...e.rsvps, [me]: s } })),
+    // Recliquer sur sa réponse la retire : on redevient « sans réponse »,
+    // ce qui n'est pas la même chose que « pas dispo ».
+    rsvp: (id, s) => updateEvent(id, (e) => {
+      const next = { ...e.rsvps };
+      if (next[me] === s) delete next[me];
+      else next[me] = s;
+      return { ...e, rsvps: next };
+    }),
     del: delEvent,
     setModule: (id, key, val) => updateEvent(id, (e) => ({ ...e, modules: { ...(e.modules || (e.scale === "big" ? MODULES_BIG : MODULES_DAILY)), [key]: val } })),
     addComment: (id, text) => updateEvent(id, (e) => ({ ...e, comments: [...(e.comments || []), { id: uid(), by: me, text, at: Date.now() }] })),
@@ -257,6 +277,10 @@ export default function App({ me: meFromAuth = null, onSignOut = null, notifyCit
     delHosting: (id) => updateEvent(id, (e) => ({ ...e, hosting: (e.hosting || []).filter((h) => h.by !== me) })),
   }), [me, updateEvent, events]);
 
+  /* eslint-disable @typescript-eslint/no-unused-vars --
+     L'onglet Dispos est en pause et l'onglet Idées a été retiré de la
+     navigation. Le code reste en place, prêt à être rebranché : le
+     supprimer ferait perdre une mécanique qui fonctionne. */
   const addAvail = (o) => saveAvail([{ ...o, id: uid(), by: me }, ...availability]);
   const delAvail = (id) => saveAvail(availability.filter((a) => a.id !== id));
 
@@ -274,6 +298,10 @@ export default function App({ me: meFromAuth = null, onSignOut = null, notifyCit
     await saveProposals(proposals.filter((x) => x.id !== p.id));
     setTab("events"); setScale(sc);
   };
+  /* eslint-enable @typescript-eslint/no-unused-vars */
+
+  // Le titre du header ramène à la liste, quel que soit l'endroit où on est.
+  const goHome = () => { setSelected(null); setTab("events"); };
 
   const pickCity = (c) => {
     setCity(c);
@@ -298,12 +326,15 @@ export default function App({ me: meFromAuth = null, onSignOut = null, notifyCit
         <div className="center"><div className="spinner" /></div>
       ) : !me ? (
         <Onboarding onPick={pickName} />
-      ) : selectedEvent ? (
-        <EventDetail ev={selectedEvent} me={me} actions={actions} availability={availability} onBack={() => setSelected(null)} />
       ) : (
         <>
-          <Header me={me} onSignOut={onSignOut} notifyCity={notifyCity} onSetCity={onSetCity} />
-          <Tabs tab={tab} setTab={setTab} propCount={proposals.length} newCount={newCities.size} />
+          {/* Le header reste en place partout : liste comme fiche d'event. */}
+          <Header me={me} onSignOut={onSignOut} notifyCity={notifyCity} onSetCity={onSetCity} onHome={goHome} />
+          {selectedEvent ? (
+            <EventDetail ev={selectedEvent} me={me} actions={actions} availability={availability} onBack={() => setSelected(null)} />
+          ) : (
+            <>
+          <Tabs tab={tab} setTab={setTab} newCount={newCities.size} />
           <main className="wrap">
             {tab === "events" && (
               <>
@@ -322,14 +353,18 @@ export default function App({ me: meFromAuth = null, onSignOut = null, notifyCit
                 <EventsView data={filtered} me={me} onOpen={setSelected} scale={scale} />
               </>
             )}
-            {tab === "avail" && <AvailabilityView availability={availability} me={me} onAdd={addAvail} onDel={delAvail} />}
-            {tab === "proposals" && <ProposalsView proposals={proposals} me={me} onVote={toggleVote} onPromote={promote} />}
+            {tab === "avail" && (
+              <Empty icon={<CalendarX size={26} />} title="À venir dans une prochaine MAJ"
+                text="Les dispos permettront de dire quand tu n'es pas là, pour que les sondages de dates en tiennent compte." />
+            )}
           </main>
-          {tab !== "avail" && (
-            <button className="fab" onClick={() => setModal(tab === "events" ? "event" : "proposal")}>
+          {tab === "events" && (
+            <button className="fab" onClick={() => setModal("event")}>
               <Plus size={22} strokeWidth={2.4} />
-              <span>{tab === "events" ? (scale === "big" ? "Ajouter un big event" : "Ajouter un event quotidien") : "Proposer une idée"}</span>
+              <span>{scale === "big" ? "Ajouter un big event" : "Ajouter un event quotidien"}</span>
             </button>
+          )}
+            </>
           )}
         </>
       )}
@@ -359,16 +394,27 @@ function Onboarding({ onPick }) {
 }
 
 // ---------- header + tabs ----------
-function Header({ me, onSignOut, notifyCity, onSetCity }) {
+function Header({ me, onSignOut, notifyCity, onSetCity, onHome }) {
   const [open, setOpen] = useState(false);
+  const [stuck, setStuck] = useState(false);
+
+  // Le filet sous le header n'apparaît qu'une fois du contenu passé dessous.
+  useEffect(() => {
+    const onScroll = () => setStuck(window.scrollY > 4);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
   // Optimiste : la puce se coche tout de suite, l'enregistrement suit.
   const [city, setCity] = useState(notifyCity || "");
   const pick = (c) => { const next = city === c ? "" : c; setCity(next); onSetCity?.(next); };
   return (
-    <header className="hd">
-      <div>
-        <h1 className="hd-kicker"><Users size={13} /> HUB Events CDM</h1>
-      </div>
+    <header className={"hd" + (stuck ? " stuck" : "")}>
+      <h1 className="hd-title-wrap">
+        <button type="button" className="hd-kicker" onClick={onHome} title="Revenir à l'accueil">
+          <Users size={13} /> HUB Events CDM
+        </button>
+      </h1>
       <div className="hd-menu-wrap">
         <button type="button" className="hd-me" aria-haspopup="menu" aria-expanded={open}
           title={me} onClick={() => setOpen((o) => !o)}>{me.slice(0, 2).toUpperCase()}</button>
@@ -399,16 +445,13 @@ function Header({ me, onSignOut, notifyCity, onSetCity }) {
     </header>
   );
 }
-function Tabs({ tab, setTab, propCount, newCount }) {
+function Tabs({ tab, setTab, newCount }) {
   return (
     <div className="tabs">
       <button className={"tab" + (tab === "events" ? " on" : "")} onClick={() => setTab("events")}>
         <CalendarDays size={16} /> Événements {newCount > 0 && <span className="dot inline" />}
       </button>
       <button className={"tab" + (tab === "avail" ? " on" : "")} onClick={() => setTab("avail")}><CalendarX size={16} /> Dispos</button>
-      <button className={"tab" + (tab === "proposals" ? " on" : "")} onClick={() => setTab("proposals")}>
-        <Lightbulb size={16} /> Idées {propCount > 0 && <span className="pill">{propCount}</span>}
-      </button>
     </div>
   );
 }
@@ -468,6 +511,7 @@ function EventCard({ ev, me, onOpen, past }) {
 
 // ---------- event detail ----------
 function EventDetail({ ev, me, actions, availability, onBack }) {
+  const [confirmDel, setConfirmDel] = useState(false);
   const cat = CATS[ev.category] || CATS.autre;
   const cd = countdown(ev.date, ev.endDate, ev.time);
   const groups = { in: [], maybe: [], out: [] };
@@ -476,7 +520,11 @@ function EventDetail({ ev, me, actions, availability, onBack }) {
   const isBig = (ev.scale || "daily") === "big";
   const links = (ev.links || []).filter((l) => l.url);
   const isCreator = ev.createdBy === me;
-  const timeLabel = ev.time ? (ev.endTime ? `${ev.time} – ${ev.endTime}` : ev.time) : "";
+  // Fin inférieure au début : l'event court jusqu'au lendemain.
+  const overnight = Boolean(ev.time && ev.endTime && ev.endTime < ev.time);
+  const timeLabel = ev.time
+    ? (ev.endTime ? `${ev.time} – ${ev.endTime}${overnight ? " (le lendemain)" : ""}` : ev.time)
+    : "";
 
   return (
     <div className="detail">
@@ -513,9 +561,10 @@ function EventDetail({ ev, me, actions, availability, onBack }) {
           <div className="rsvp-btns">
             {Object.entries(RS).map(([k, v]) => {
               const Icon = v.icon; const on = mine === k;
-              return <button key={k} className={"rsvp" + (on ? " on" : "")} style={on ? { background: v.color, borderColor: v.color, color: "#fff" } : { color: v.color }} onClick={() => actions.rsvp(ev.id, k)}><Icon size={16} /> {v.label}</button>;
+              return <button key={k} className={"rsvp" + (on ? " on" : "")} title={on ? "Reclique pour retirer ta réponse" : v.label} style={on ? { background: v.color, borderColor: v.color, color: "#fff" } : { color: v.color }} onClick={() => actions.rsvp(ev.id, k)}><Icon size={16} /> {v.label}</button>;
             })}
           </div>
+          {mine && <p className="rsvp-undo">Reclique sur ta réponse pour la retirer.</p>}
         </div>
 
         {["in", "maybe", "out"].map((k) => groups[k].length > 0 && (
@@ -550,7 +599,18 @@ function EventDetail({ ev, me, actions, availability, onBack }) {
 
         {isCreator && <ModuleToggles ev={ev} actions={actions} />}
         <div className="detail-by">Créé par {ev.createdBy}</div>
-        {isCreator && <button className="del-btn" onClick={() => actions.del(ev.id)}><Trash2 size={15} /> Supprimer l'event</button>}
+        {isCreator && (confirmDel ? (
+          <div className="del-confirm" role="alertdialog" aria-label="Confirmer la suppression">
+            <p><AlertTriangle size={15} /> Supprimer «&nbsp;{ev.title}&nbsp;» ?</p>
+            <p className="del-confirm-sub">Les réponses, commentaires et listes partiront avec. C&apos;est définitif.</p>
+            <div className="del-confirm-acts">
+              <button className="ghost-btn" onClick={() => setConfirmDel(false)}>Annuler</button>
+              <button className="del-btn danger" onClick={() => actions.del(ev.id)}><Trash2 size={15} /> Oui, supprimer</button>
+            </div>
+          </div>
+        ) : (
+          <button className="del-btn" onClick={() => setConfirmDel(true)}><Trash2 size={15} /> Supprimer l&apos;event</button>
+        ))}
       </div>
     </div>
   );
@@ -829,6 +889,8 @@ function ModuleToggles({ ev, actions }) {
 }
 
 // ---------- onglet dispos ----------
+// Conservé tel quel : onglet Dispos en pause. Rebranchable sans réécriture.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function AvailabilityView({ availability, me, onAdd, onDel }) {
   const [start, setStart] = useState(""); const [end, setEnd] = useState(""); const [note, setNote] = useState("");
   const today = todayStr();
@@ -878,6 +940,8 @@ function AvailabilityView({ availability, me, onAdd, onDel }) {
 }
 
 // ---------- proposals ----------
+// Conservé tel quel : onglet Idées retiré de la navigation. Rebranchable sans réécriture.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function ProposalsView({ proposals, me, onVote, onPromote }) {
   if (proposals.length === 0)
     return <Empty icon={<Lightbulb size={26} />} title="Aucune idée sur la table" text="Balance une proposition, les autres votent. Si ça prend (2+ votes), tu la transformes en event." />;
@@ -927,6 +991,44 @@ function CatPicker({ value, onChange }) {
     </div>
   );
 }
+// Montre, pendant la création, ce que les sections cochées donneront.
+function ModulePreview({ modules, usePoll }) {
+  const on = MODULE_LABELS.filter(([k]) => (k === "datePoll" ? usePoll || modules[k] : modules[k]));
+  return (
+    <div className="preview">
+      <div className="preview-lbl">Ce que ton event affichera</div>
+      {on.length === 0 ? (
+        <p className="preview-empty">Aucune section — l&apos;event montrera juste son titre, sa date, son lieu et qui vient.</p>
+      ) : on.map(([k]) => {
+        const m = MODULE_META[k];
+        const Icon = m.icon;
+        return (
+          <div className="preview-block" key={k}>
+            <div className="preview-head"><Icon size={15} /> {m.title}</div>
+            <p className="preview-hint">{m.hint}</p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Les champs date/heure natifs n'offrent aucun moyen de se vider sur mobile.
+// Le bouton est placé SOUS le champ, jamais par-dessus : sur iOS le sélecteur
+// natif capte tout toucher qui tombe dans sa surface, même au-dessus de lui.
+function Clearable({ value, onClear, children }) {
+  return (
+    <div className="clearable">
+      {children}
+      {value && (
+        <button type="button" className="clearbtn" onClick={onClear}>
+          <X size={12} /> Effacer
+        </button>
+      )}
+    </div>
+  );
+}
+
 function CityPicker({ value, onChange }) {
   // Une ville hors des 5 habituelles bascule le champ libre en mode ouvert.
   const [free, setFree] = useState(Boolean(value) && !CITIES[value]);
@@ -967,7 +1069,18 @@ function EventForm({ defScale, defCity, onClose, onSave }) {
     modules: { ...(defScale === "big" ? MODULES_BIG : MODULES_DAILY) },
   });
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const clear = (k) => () => setF({ ...f, [k]: "" });
   const isBig = f.scale === "big";
+
+  // Une fin antérieure au début est refusée explicitement, plutôt que
+  // silencieusement ignorée comme avant.
+  const dateError = isBig && f.date && f.endDate && f.endDate < f.date
+    ? "La date de fin est avant la date de début."
+    : "";
+  // Une heure de fin inférieure n'est pas une faute : la soirée déborde sur
+  // le lendemain. On le signale sans bloquer.
+  const overnight = !isBig && f.time && f.endTime && f.endTime < f.time;
+  const invalid = Boolean(dateError);
 
   // quand on change de type, on réaligne les sections par défaut de ce type
   const switchScale = (s) => setF({ ...f, scale: s, modules: { ...(s === "big" ? MODULES_BIG : MODULES_DAILY), datePoll: f.usePoll || (s === "big" ? MODULES_BIG : MODULES_DAILY).datePoll } });
@@ -982,7 +1095,7 @@ function EventForm({ defScale, defCity, onClose, onSave }) {
       if (f.airbnb.trim()) links.push({ kind: "airbnb", label: "Airbnb", url: f.airbnb.trim() });
       if (f.otherUrl.trim()) links.push({ kind: "other", label: f.otherLabel.trim() || "Lien", url: f.otherUrl.trim() });
     }
-    const endDate = isBig && f.endDate && f.endDate >= f.date ? f.endDate : "";
+    const endDate = isBig ? f.endDate : "";
     const modules = { ...f.modules, datePoll: f.usePoll ? true : f.modules.datePoll };
     onSave({
       title: f.title.trim(), category: f.category, scale: f.scale, city: f.city,
@@ -1000,17 +1113,21 @@ function EventForm({ defScale, defCity, onClose, onSave }) {
       <Field group label="Catégorie"><CatPicker value={f.category} onChange={(c) => setF({ ...f, category: c })} /></Field>
 
       {!f.usePoll && (isBig ? (
-        <div className="row2">
-          <Field label="Date de début"><input type="date" value={f.date} onChange={set("date")} /></Field>
-          <Field label="Date de fin"><input type="date" value={f.endDate} min={f.date} onChange={set("endDate")} /></Field>
-        </div>
+        <>
+          <div className="row2">
+            <Field group label="Date de début"><Clearable value={f.date} onClear={clear("date")}><input type="date" value={f.date} onChange={set("date")} aria-label="Date de début" /></Clearable></Field>
+            <Field group label="Date de fin"><Clearable value={f.endDate} onClear={clear("endDate")}><input type="date" value={f.endDate} min={f.date} onChange={set("endDate")} aria-label="Date de fin" /></Clearable></Field>
+          </div>
+          {dateError && <p className="field-err" role="alert"><AlertTriangle size={14} /> {dateError}</p>}
+        </>
       ) : (
         <>
-          <Field label="Date"><input type="date" value={f.date} onChange={set("date")} /></Field>
+          <Field group label="Date"><Clearable value={f.date} onClear={clear("date")}><input type="date" value={f.date} onChange={set("date")} aria-label="Date" /></Clearable></Field>
           <div className="row2">
-            <Field label="Heure de début"><input type="time" value={f.time} onChange={set("time")} /></Field>
-            <Field label="Heure de fin"><input type="time" value={f.endTime} onChange={set("endTime")} /></Field>
+            <Field group label="Heure de début"><Clearable value={f.time} onClear={clear("time")}><input type="time" step="900" value={f.time} onChange={set("time")} aria-label="Heure de début" /></Clearable></Field>
+            <Field group label="Heure de fin"><Clearable value={f.endTime} onClear={clear("endTime")}><input type="time" step="900" value={f.endTime} onChange={set("endTime")} aria-label="Heure de fin" /></Clearable></Field>
           </div>
+          {overnight && <p className="field-note"><CalendarClock size={14} /> Cet event se termine le lendemain.</p>}
         </>
       ))}
 
@@ -1022,7 +1139,7 @@ function EventForm({ defScale, defCity, onClose, onSave }) {
       <Field label="Où ?"><input value={f.place} onChange={set("place")} placeholder="Adresse, bar, lieu…" /></Field>
       <Field label="Détails (optionnel)"><textarea value={f.description} onChange={set("description")} rows={3} placeholder="Programme, ce qu'il faut ramener…" /></Field>
 
-      <Field group label="Sections à activer" hint={isBig ? "Un big event a tout par défaut." : "Un event quotidien reste léger par défaut."}>
+      <Field group label="Sections à activer" hint="Rien par défaut : coche ce dont tu as besoin, l'aperçu se remplit en dessous.">
         <div className="catpick">
           {MODULE_LABELS.map(([k, l]) => {
             const on = k === "datePoll" ? (f.usePoll || f.modules[k]) : f.modules[k];
@@ -1032,6 +1149,8 @@ function EventForm({ defScale, defCity, onClose, onSave }) {
           })}
         </div>
       </Field>
+
+      <ModulePreview modules={f.modules} usePoll={f.usePoll} />
 
       <div className="links-form">
         <div className="links-form-head"><MapIcon size={14} /> Lien Google Maps</div>
@@ -1054,8 +1173,11 @@ function EventForm({ defScale, defCity, onClose, onSave }) {
         </div>
       )}
 
-      <button className="btn-primary big" disabled={!f.title.trim() || !f.city || (!f.usePoll && !f.date)}
-        onClick={save}>{!f.city ? "Choisis une ville" : (!f.usePoll && !f.date) ? "Choisis une date (ou un sondage)" : "Créer l'event"}</button>
+      <button className="btn-primary big" disabled={!f.title.trim() || !f.city || (!f.usePoll && !f.date) || invalid}
+        onClick={save}>{!f.city ? "Choisis une ville"
+          : (!f.usePoll && !f.date) ? "Choisis une date (ou un sondage)"
+          : dateError ? "Corrige les dates"
+          : "Créer l'event"}</button>
     </Modal>
   );
 }
@@ -1117,7 +1239,7 @@ function seedAvail() {
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Inter:wght@400;500;600&display=swap');
 .root{--bg:#F4F2ED;--card:#FFFFFF;--ink:#211D2B;--muted:#726C7E;--line:#E6E2D8;--accent:#B4451F;--accent-soft:#FBEBE4;
-  font-family:'Inter',system-ui,sans-serif;color:var(--ink);background:var(--bg);min-height:100vh;min-height:100dvh;max-width:560px;margin:0 auto;position:relative;-webkit-font-smoothing:antialiased;}
+  font-family:'Inter',system-ui,sans-serif;color:var(--ink);background:var(--bg);min-height:100vh;min-height:100dvh;max-width:560px;margin:0 auto;position:relative;overflow-x:clip;-webkit-font-smoothing:antialiased;}
 *{box-sizing:border-box;}
 h1,h2,h3{font-family:'Bricolage Grotesque',sans-serif;margin:0;letter-spacing:-.02em;}
 button{font-family:inherit;cursor:pointer;border:none;background:none;}
@@ -1138,8 +1260,14 @@ a{text-decoration:none;color:inherit;}
 .onb-input:focus{border-color:var(--accent);}
 .onb-note{color:var(--muted);font-size:12.5px;margin-top:14px;}
 
-.hd{display:flex;justify-content:space-between;align-items:center;padding:22px 18px 12px;gap:12px;}
-.hd-kicker{display:inline-flex;align-items:center;gap:6px;color:var(--accent);font-weight:700;font-size:15px;letter-spacing:-.01em;background:var(--accent-soft);padding:7px 14px;border-radius:20px;}
+.hd{position:sticky;top:0;z-index:30;display:flex;justify-content:space-between;align-items:center;
+  padding:calc(14px + env(safe-area-inset-top)) 18px 12px;gap:12px;
+  background:var(--bg);border-bottom:1px solid transparent;}
+/* Un filet apparaît dès que du contenu passe dessous. */
+.hd.stuck{border-bottom-color:var(--line);box-shadow:0 6px 18px -14px rgba(20,17,28,.5);}
+.hd-kicker{display:inline-flex;align-items:center;gap:6px;color:var(--accent);font-weight:700;font-size:15px;letter-spacing:-.01em;background:var(--accent-soft);padding:7px 14px;border-radius:20px;cursor:pointer;font-family:inherit;border:none;}
+.hd-title-wrap{margin:0;min-width:0;}
+.hd-kicker:active{transform:scale(.97);}
 .hd-title{font-size:26px;font-weight:800;margin-top:9px;line-height:1.08;max-width:16ch;}
 .hd-me{flex-shrink:0;width:42px;height:42px;border-radius:14px;background:var(--ink);color:#fff;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;font-family:'Bricolage Grotesque';}
 .hd-menu-wrap{position:relative;flex-shrink:0;}
@@ -1204,7 +1332,9 @@ a{text-decoration:none;color:inherit;}
 .past-toggle.open{margin-bottom:12px;}
 .past-toggle.open svg{transform:rotate(180deg);}
 
-.detail{min-height:100vh;min-height:100dvh;}
+/* La fiche vit désormais sous le header : elle ne doit plus réclamer
+   toute la hauteur de l'écran, sinon la page dépasse d'autant. */
+.detail{min-height:auto;}
 .detail-hero{padding:16px 18px 30px;color:#fff;border-radius:0 0 26px 26px;}
 .detail-emoji{font-size:44px;margin:16px 0 10px;}
 .detail-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
@@ -1236,6 +1366,7 @@ a{text-decoration:none;color:inherit;}
 .rsvp-box{background:var(--card);border:2px solid var(--accent);border-radius:18px;padding:18px;margin:18px 0;box-shadow:0 8px 24px -14px var(--accent);}
 .rsvp-q{font-weight:800;font-family:'Bricolage Grotesque';font-size:21px;letter-spacing:-.02em;margin-bottom:14px;color:var(--ink);}
 .rsvp-btns{display:flex;gap:8px;}
+.rsvp-undo{color:var(--muted);font-size:12.5px;margin:11px 0 0;}
 .rsvp{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:12px 4px;border:2px solid var(--line);border-radius:13px;font-weight:600;font-size:12.5px;transition:.15s;background:var(--card);}
 .people{margin:16px 0;}
 .people-label{font-weight:700;font-size:13.5px;font-family:'Bricolage Grotesque';margin-bottom:9px;}
@@ -1275,7 +1406,13 @@ a{text-decoration:none;color:inherit;}
 .placeadd{display:flex;flex-direction:column;gap:8px;margin-top:12px;}
 .placeadd-row{display:flex;gap:8px;}
 .placeadd input{flex:1;min-width:0;padding:11px 13px;border:2px solid var(--line);border-radius:12px;font-size:16px;font-family:inherit;background:var(--card);color:var(--ink);}
-.poll-maps{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;font-weight:600;color:#1A73E8;margin-top:3px;}
+.pollinfo b{display:block;}
+/* Le lien Maps est une cible tactile à part : il descend sous le nom du lieu
+   et prend une pastille, pour ne pas se confondre avec lui. */
+.poll-maps{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;
+  color:#1A73E8;background:#E8F0FE;padding:5px 10px;border-radius:9px;margin-top:9px;
+  text-transform:none;}
+.poll-maps:hover{background:#D6E4FC;}
 .city-free{width:100%;margin-top:8px;padding:12px 14px;border:2px solid var(--accent);border-radius:12px;font-size:16px;font-family:inherit;background:var(--card);color:var(--ink);outline:none;}
 .polladd input{flex:1;min-width:0;padding:10px;border:2px solid var(--line);border-radius:11px;font-size:16px;background:var(--bg);outline:none;font-family:inherit;}
 .polladd input:focus{border-color:var(--accent);}
@@ -1321,6 +1458,12 @@ a{text-decoration:none;color:inherit;}
 
 .detail-by{color:var(--muted);font-size:13px;margin:22px 0 10px;}
 .del-btn{display:inline-flex;align-items:center;gap:7px;color:#DC2626;font-weight:600;font-size:14px;padding:10px 14px;border-radius:11px;border:1px solid #FCA5A5;background:#FEF2F2;}
+.del-confirm{background:#FDECEC;border:1.5px solid #F3C6C6;border-radius:16px;padding:15px;margin-top:14px;}
+.del-confirm p{display:flex;align-items:center;gap:7px;margin:0;font-weight:700;font-size:14.5px;color:#B91C1C;}
+.del-confirm-sub{display:block!important;margin-top:6px!important;font-weight:400!important;font-size:13px!important;color:#8A3B3B!important;line-height:1.45;}
+.del-confirm-acts{display:flex;gap:10px;margin-top:14px;}
+.del-confirm-acts .ghost-btn{flex:1;padding:11px;border-radius:12px;background:var(--card);font-weight:600;}
+.del-btn.danger{flex:1;margin-top:0;justify-content:center;background:#B91C1C;color:#fff;}
 
 .prop{display:flex;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:11px;}
 .vote{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:2px;width:52px;padding:9px 0;border:2px solid var(--line);border-radius:13px;color:var(--muted);font-family:'Bricolage Grotesque';transition:.15s;}
@@ -1343,21 +1486,51 @@ a{text-decoration:none;color:inherit;}
 .empty p{color:var(--muted);line-height:1.5;max-width:32ch;margin:0 auto;font-size:14.5px;}
 
 .overlay{position:fixed;inset:0;background:rgba(20,17,28,.5);display:flex;align-items:flex-end;justify-content:center;z-index:50;animation:fade .2s;}
-.sheet{background:var(--bg);width:100%;max-width:560px;border-radius:24px 24px 0 0;max-height:92vh;max-height:92dvh;overflow-y:auto;animation:up .25s cubic-bezier(.2,.8,.2,1);}
+.sheet{background:var(--bg);width:100%;max-width:560px;border-radius:24px 24px 0 0;max-height:92vh;max-height:92dvh;overflow-y:auto;overflow-x:hidden;animation:up .25s cubic-bezier(.2,.8,.2,1);}
 @keyframes fade{from{opacity:0;}}
 @keyframes up{from{transform:translateY(30px);}}
 .sheet-head{display:flex;justify-content:space-between;align-items:center;padding:20px 20px 6px;position:sticky;top:0;background:var(--bg);z-index:2;}
 .sheet-head h2{font-size:22px;font-weight:800;}
 .x{width:36px;height:36px;border-radius:50%;background:var(--card);display:flex;align-items:center;justify-content:center;color:var(--muted);border:1px solid var(--line);}
-.sheet-body{padding:12px 20px calc(30px + env(safe-area-inset-bottom));}
+.sheet-body{padding:12px 20px calc(30px + env(safe-area-inset-bottom));min-width:0;}
 .field{display:block;margin-bottom:16px;}
 .field>span{display:block;font-weight:600;font-size:13.5px;margin-bottom:7px;}
 .field-hint{display:block;color:var(--muted);font-size:12px;font-style:normal;margin-top:6px;}
+.field-err{display:flex;align-items:center;gap:6px;margin:-6px 0 16px;padding:9px 12px;
+  border-radius:10px;background:#FDECEC;color:#B91C1C;font-size:13px;font-weight:600;line-height:1.4;}
+.field-note{display:flex;align-items:center;gap:6px;margin:-6px 0 16px;padding:9px 12px;
+  border-radius:10px;background:var(--accent-soft);color:var(--accent);font-size:13px;font-weight:600;line-height:1.4;}
 .field input,.field textarea{width:100%;padding:13px 14px;border:2px solid var(--line);border-radius:12px;font-size:16px;background:var(--card);outline:none;font-family:inherit;transition:border-color .15s;}
 .field input:focus,.field textarea:focus{border-color:var(--accent);}
 .field textarea{resize:vertical;}
 .row2{display:flex;gap:12px;}
-.row2 .field{flex:1;}
+.row2 .field{flex:1;min-width:0;}
+
+/* Sur iOS, input[type=date|time] refuse de descendre sous une largeur
+   imposée par son contrôle natif — min-width:0 sur l'input n'y suffit pas.
+   Il faut retirer l'habillage système ET relâcher le pseudo-élément qui
+   porte la valeur, qui a son propre plancher. */
+.field input[type="date"],.field input[type="time"]{
+  -webkit-appearance:none;appearance:none;min-width:0;width:100%;padding-left:11px;padding-right:11px;}
+.field input[type="date"]::-webkit-date-and-time-value,
+.field input[type="time"]::-webkit-date-and-time-value{
+  min-width:0;width:100%;text-align:left;margin:0;}
+.field input[type="date"]::-webkit-calendar-picker-indicator,
+.field input[type="time"]::-webkit-calendar-picker-indicator{margin:0;padding:0;}
+.field input,.field textarea{min-width:0;max-width:100%;}
+.clearable{display:flex;flex-direction:column;align-items:flex-start;gap:6px;}
+.clearable input{width:100%;}
+.clearbtn{display:inline-flex;align-items:center;gap:4px;padding:5px 9px;border-radius:8px;
+  background:var(--bg);color:var(--muted);font-family:inherit;font-size:12.5px;font-weight:600;}
+.clearbtn:active,.clearbtn:hover{background:#EDEAE3;color:var(--ink);}
+.preview{border:2px dashed var(--line);border-radius:16px;padding:14px;margin-bottom:16px;background:var(--bg);}
+.preview-lbl{font-family:'Bricolage Grotesque';font-weight:700;font-size:12.5px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:10px;}
+.preview-empty{color:var(--muted);font-size:13px;line-height:1.5;margin:0;}
+.preview-block{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin-bottom:8px;}
+.preview-block:last-child{margin-bottom:0;}
+.preview-head{display:flex;align-items:center;gap:7px;font-family:'Bricolage Grotesque';font-weight:700;font-size:14.5px;}
+.preview-hint{color:var(--muted);font-size:12.5px;line-height:1.45;margin:4px 0 0;}
 .toggle-row{display:flex;align-items:flex-start;gap:11px;padding:14px;background:var(--accent-soft);border-radius:14px;margin-bottom:16px;cursor:pointer;}
 .toggle-row input{width:20px;height:20px;margin-top:1px;flex-shrink:0;accent-color:var(--accent);}
 .toggle-row span{font-size:14px;line-height:1.4;}

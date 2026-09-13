@@ -53,6 +53,21 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // L'inverse : un visiteur connecté n'a rien à faire sur /login. Sans cela,
+  // le bouton retour du navigateur l'y renvoie. /auth/* est exclu — l'écran
+  // de nouveau mot de passe a justement besoin d'une session ouverte.
+  if (user && pathname.startsWith("/login")) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/";
+    return NextResponse.redirect(url);
+  }
+
+  // Décourage la mise en cache de l'écran de connexion : un retour arrière
+  // ne doit pas ressortir une page devenue sans objet.
+  if (pathname.startsWith("/login")) {
+    response.headers.set("Cache-Control", "no-store, must-revalidate");
+  }
+
   return response;
 }
 

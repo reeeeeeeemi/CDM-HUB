@@ -1,6 +1,9 @@
 "use server";
 
-import { redirect } from "next/navigation";
+// RedirectType.replace partout : dans une Server Action, redirect() empile
+// par défaut, si bien que /login resterait dans l'historique et que le bouton
+// Retour du navigateur y ramènerait après la connexion.
+import { redirect, RedirectType } from "next/navigation";
 import { headers } from "next/headers";
 
 import { createClient } from "@/lib/supabase/server";
@@ -40,7 +43,7 @@ export async function signIn(_prev: AuthState, formData: FormData): Promise<Auth
 
   if (error) return { error: readable(error.message) };
 
-  redirect("/");
+  redirect("/", RedirectType.replace);
 }
 
 export async function signUp(_prev: AuthState, formData: FormData): Promise<AuthState> {
@@ -77,7 +80,7 @@ export async function signUp(_prev: AuthState, formData: FormData): Promise<Auth
     return { notice: `Compte créé. Ouvre le lien envoyé à ${email} pour le confirmer.` };
   }
 
-  redirect("/");
+  redirect("/", RedirectType.replace);
 }
 
 export async function requestReset(_prev: AuthState, formData: FormData): Promise<AuthState> {
@@ -129,11 +132,11 @@ export async function updatePassword(_prev: AuthState, formData: FormData): Prom
 
   if (error) return { error: readable(error.message) };
 
-  redirect("/");
+  redirect("/", RedirectType.replace);
 }
 
 export async function signOut() {
   const supabase = await createClient();
   await supabase.auth.signOut();
-  redirect("/login");
+  redirect("/login", RedirectType.replace);
 }
