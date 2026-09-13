@@ -21,6 +21,9 @@ import {
 // sur la forme imbriquée héritée du prototype, et la traduction vit là-bas.
 import * as db from "@/lib/hub-data";
 import { nameOf } from "@/lib/hub-data";
+import {
+  savePushSubscription, removePushSubscription, notifyNewEvent, notifyEventActivity,
+} from "@/lib/actions/push";
 
 // ---------- config ----------
 const CATS = {
@@ -224,6 +227,78 @@ function useCloseOnBack(open, close) {
   }, [open, close]);
 }
 
+// ---------- notifications ----------
+const VAPID = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+
+/** La clé VAPID voyage en base64url ; PushManager attend des octets bruts. */
+const vapidBytes = (key) => {
+  const pad = "=".repeat((4 - (key.length % 4)) % 4);
+  const raw = atob((key + pad).replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+};
+
+/**
+ * État de l'abonnement aux notifications de cet appareil.
+ *
+ * « unsupported » n'est pas un échec : sur iPhone, Notification et PushManager
+ * n'existent que dans l'app ajoutée à l'écran d'accueil. Dans Safari, il n'y a
+ * rien à proposer, et le dire vaut mieux qu'un bouton qui ne ferait rien.
+ */
+function usePush() {
+  const [state, setState] = useState("checking"); // checking|unsupported|off|on|denied
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      if (!VAPID || !("serviceWorker" in navigator) || !("PushManager" in window)
+          || !("Notification" in window)) return setState("unsupported");
+      if (Notification.permission === "denied") return setState("denied");
+      try {
+        const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" });
+        setState((await reg.pushManager.getSubscription()) ? "on" : "off");
+      } catch {
+        setState("unsupported");
+      }
+    })();
+  }, []);
+
+  const enable = async () => {
+    setBusy(true); setErr("");
+    try {
+      // iOS exige que la demande vienne d'un geste : d'où le bouton.
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") { setState(perm === "denied" ? "denied" : "off"); return; }
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: vapidBytes(VAPID),
+      });
+      const r = await savePushSubscription(JSON.parse(JSON.stringify(sub)));
+      // Si la base refuse, défaire l'abonnement : le garder côté navigateur
+      // promettrait des notifications que personne ne saurait envoyer.
+      if (r?.error) { await sub.unsubscribe(); setErr(r.error); return; }
+      setState("on");
+    } catch (e) {
+      setErr(e?.message || "Impossible d'activer les notifications.");
+    } finally { setBusy(false); }
+  };
+
+  const disable = async () => {
+    setBusy(true); setErr("");
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) { await removePushSubscription(sub.endpoint); await sub.unsubscribe(); }
+      setState("off");
+    } catch (e) {
+      setErr(e?.message || "Impossible de couper les notifications.");
+    } finally { setBusy(false); }
+  };
+
+  return { state, busy, err, enable, disable };
+}
+
 // ---------- app ----------
 /**
  * `me` vient du compte connecté (voir app/page.tsx). Quand il est fourni,
@@ -343,6 +418,11 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
     await persist(() => db.insertEvent(row, me));
     // Le créateur est chaud par défaut : une ligne de plus, à part.
     await persist(() => db.setRsvp(row.id, me, "in"));
+    // Règles 1 et 2 : big event pour tout le groupe, plan du quotidien pour
+    // ceux qui vivent dans la ville. La base tranche, on ne fait qu'annoncer.
+    // Volontairement sans await : une notification qui échoue ne doit pas
+    // remonter comme un échec de création.
+    notifyNewEvent(row.id, row.title, row.scale, row.city || "").catch(() => {});
   };
 
   const delEvent = useCallback(async (id) => {
@@ -355,14 +435,19 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
     // Recliquer sur sa réponse la retire : on redevient « sans réponse »,
     // ce qui n'est pas la même chose que « pas dispo ».
     rsvp: (id, s) => {
-      let status = s;
+      let status = s, title = "";
       updateEvent(id, (e) => {
+        title = e.title;
         const next = { ...e.rsvps };
         if (next[me] === s) { delete next[me]; status = null; }
         else next[me] = s;
         return { ...e, rsvps: next };
       });
       persist(() => db.setRsvp(id, me, status));
+      // Règle 3, versant réponses. Seul « chaud » prévient l'auteur : un
+      // « peut-être » ou un désistement ne vaut pas de faire vibrer un
+      // téléphone, et la base écarte déjà le cas de son propre event.
+      if (status === "in") notifyEventActivity(id, title, `${meName} est chaud`).catch(() => {});
     },
     del: delEvent,
     setModule: (id, key, val) => {
@@ -376,8 +461,15 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
 
     addComment: (id, text) => {
       const cid = uid();
-      updateEvent(id, (e) => ({ ...e, comments: [...(e.comments || []), { id: cid, by: me, text, at: Date.now() }] }));
+      let title = "";
+      updateEvent(id, (e) => {
+        title = e.title;
+        return { ...e, comments: [...(e.comments || []), { id: cid, by: me, text, at: Date.now() }] };
+      });
       persist(() => db.addComment(cid, id, me, text));
+      // Règle 3, versant commentaires. Le texte part dans la notification :
+      // le plus souvent il se suffit, et évite d'ouvrir l'app pour rien.
+      notifyEventActivity(id, title, `${meName} : ${text}`).catch(() => {});
     },
     delComment: (id, cid) => {
       updateEvent(id, (e) => ({ ...e, comments: (e.comments || []).filter((c) => c.id !== cid) }));
@@ -485,7 +577,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
       updateEvent(id, (e) => ({ ...e, hosting: (e.hosting || []).filter((h) => h.by !== me) }));
       persist(() => db.delHosting(id, me));
     },
-  }), [me, updateEvent, persist, delEvent]);
+  }), [me, meName, updateEvent, persist, delEvent]);
 
   /* eslint-disable @typescript-eslint/no-unused-vars --
      L'onglet Dispos est en pause côté navigation, mais ses écritures sont
@@ -583,6 +675,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
 // ---------- header + tabs ----------
 function Header({ meName, onSignOut, notifyCity, onSetCity, onHome, onInvite }) {
   const [open, setOpen] = useState(false);
+  const push = usePush();
   const [invite, setInvite] = useState("");
   const [making, setMaking] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -641,6 +734,34 @@ function Header({ meName, onSignOut, notifyCity, onSetCity, onHome, onInvite }) 
                   <button key={c} type="button" className={"catchip city" + (city === c ? " on" : "")}
                     onClick={() => pick(c)}>{CITIES[c]} {c}</button>
                 ))}
+              </div>
+
+              <div className="hd-menu-inv">
+                <div className="hd-menu-sec">Notifications</div>
+                {push.state === "unsupported" ? (
+                  <p className="hd-menu-hint">
+                    Ajoute d&apos;abord l&apos;app à ton écran d&apos;accueil : sur iPhone,
+                    les notifications n&apos;existent que là.
+                  </p>
+                ) : push.state === "denied" ? (
+                  <p className="hd-menu-hint">
+                    Tu les as refusées. Ça se rouvre dans les réglages de ton téléphone,
+                    à la ligne de cette app.
+                  </p>
+                ) : (
+                  <>
+                    <p className="hd-menu-hint">
+                      Les big events, les plans de ta ville, et les réactions sur les tiens.
+                    </p>
+                    <button type="button" className="inv-make" disabled={push.busy || push.state === "checking"}
+                      onClick={push.state === "on" ? push.disable : push.enable}>
+                      {push.busy ? "Un instant…"
+                        : push.state === "on" ? "Couper les notifications"
+                        : "Activer les notifications"}
+                    </button>
+                  </>
+                )}
+                {push.err && <p className="hd-menu-err">{push.err}</p>}
               </div>
 
               {onInvite && (
