@@ -13,6 +13,13 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  {
+    rules: {
+      // L'app est en français : "aujourd'hui", "qu'on", "l'instant" sont
+      // partout dans le JSX. Cette règle ne signale rien de dangereux ici.
+      "react/no-unescaped-entities": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

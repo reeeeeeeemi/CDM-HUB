@@ -37,7 +37,20 @@ export async function proxy(request: NextRequest) {
 
   // Do not add code between createServerClient and getUser(): the token
   // refresh must happen first, or the session can end up out of sync.
-  await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // Optimistic check only — it saves rendering a page the visitor cannot see.
+  // The real authorisation lives in app/page.tsx and in the RLS policies.
+  const { pathname } = request.nextUrl;
+  const isPublic = pathname.startsWith("/login") || pathname.startsWith("/auth");
+
+  if (!user && !isPublic) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    return NextResponse.redirect(url);
+  }
 
   return response;
 }

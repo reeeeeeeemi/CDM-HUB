@@ -1,29 +1,27 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Bricolage_Grotesque, Inter } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const bricolage = Bricolage_Grotesque({
+  variable: "--font-bricolage",
   subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
-  title: "CDM Hub | Strategy, Systems, Momentum",
-  description: "CDM Hub helps teams move from fragmented process to clear execution with smarter systems, sharper insights, and confident delivery.",
+  title: "HUB Events CDM",
+  description:
+    "Le QG des plans de la bande : ce qui arrive, ce qu'on propose, qui est chaud — Toulouse à Rome.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col bg-[#07111f] text-slate-100">{children}</body>
+    <html lang="fr" className={`${inter.variable} ${bricolage.variable} h-full antialiased`}>
+      <body className="min-h-full">{children}</body>
     </html>
   );
 }
