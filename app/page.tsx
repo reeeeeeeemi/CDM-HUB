@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 
 import CrewHub from "./crew-hub";
 import { createInvite } from "@/lib/actions/invite";
-import { setNotifyCity } from "@/lib/actions/profile";
+import { setNotifyCity, setNotifyPrefs } from "@/lib/actions/profile";
 
 import { signOut } from "./login/actions";
 import "./login/login.css";
@@ -25,7 +25,7 @@ export default async function Page() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("pseudo, city")
+    .select("pseudo, city, notify_big, notify_city, notify_mine")
     .eq("id", user.id)
     .single();
 
@@ -70,6 +70,12 @@ export default async function Page() {
       onSignOut={signOut}
       notifyCity={profile?.city ?? ""}
       onSetCity={setNotifyCity}
+      notifyPrefs={{
+        big: profile?.notify_big ?? true,
+        city: profile?.notify_city ?? true,
+        mine: profile?.notify_mine ?? true,
+      }}
+      onSetPrefs={setNotifyPrefs}
       onInvite={createInvite}
     />
   );

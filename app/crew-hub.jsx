@@ -228,6 +228,14 @@ function useCloseOnBack(open, close) {
 }
 
 // ---------- notifications ----------
+// Les trois règles, telles qu'elles apparaissent dans le menu. Les clés
+// correspondent aux colonnes notify_* de profiles.
+const PREFS = [
+  ["big",  "Les big events"],
+  ["city", "Les plans dans ma ville"],
+  ["mine", "Les réactions sur mes events"],
+];
+
 const VAPID = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 
 /** La clé VAPID voyage en base64url ; PushManager attend des octets bruts. */
@@ -306,9 +314,11 @@ function usePush() {
  *
  * @param {{ me?: string | null, meName?: string, onSignOut?: (() => void | Promise<void>) | null,
  *          notifyCity?: string, onSetCity?: ((city: string) => void) | null,
- *          onInvite?: (() => Promise<{ url?: string, error?: string }>) | null }} props
+ *          onInvite?: (() => Promise<{ url?: string, error?: string }>) | null,
+ *          notifyPrefs?: { big: boolean, city: boolean, mine: boolean } | null,
+ *          onSetPrefs?: ((prefs: Record<string, boolean>) => void) | null }} props
  */
-export default function App({ me: meFromAuth = null, meName = "", onSignOut = null, notifyCity = "", onSetCity = null, onInvite = null }) {
+export default function App({ me: meFromAuth = null, meName = "", onSignOut = null, notifyCity = "", onSetCity = null, onInvite = null, notifyPrefs = null, onSetPrefs = null }) {
   const [me, setMe] = useState(meFromAuth);
   const [tab, setTab] = useState("events");
   const [scale, setScale] = useState("big");
@@ -620,7 +630,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
       ) : (
         <>
           {/* Le header reste en place partout : liste comme fiche d'event. */}
-          <Header meName={meName} onSignOut={onSignOut} notifyCity={notifyCity} onSetCity={onSetCity} onHome={goHome} onInvite={onInvite} />
+          <Header meName={meName} onSignOut={onSignOut} notifyCity={notifyCity} onSetCity={onSetCity} onHome={goHome} onInvite={onInvite} notifyPrefs={notifyPrefs} onSetPrefs={onSetPrefs} />
           {selectedEvent ? (
             <EventDetail ev={selectedEvent} me={me} actions={actions} availability={availability} onBack={closeEvent} />
           ) : (
@@ -673,9 +683,17 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
 
 
 // ---------- header + tabs ----------
-function Header({ meName, onSignOut, notifyCity, onSetCity, onHome, onInvite }) {
+function Header({ meName, onSignOut, notifyCity, onSetCity, onHome, onInvite, notifyPrefs, onSetPrefs }) {
   const [open, setOpen] = useState(false);
   const push = usePush();
+  // Optimiste, comme la ville : la case bascule tout de suite, l'écriture suit.
+  const [prefs, setPrefs] = useState(notifyPrefs || { big: true, city: true, mine: true });
+  const flipPref = (k) => {
+    const next = { ...prefs, [k]: !prefs[k] };
+    setPrefs(next);
+    // Un seul interrupteur part : deux onglets ouverts ne s'écrasent pas.
+    onSetPrefs?.({ [k]: next[k] });
+  };
   const [invite, setInvite] = useState("");
   const [making, setMaking] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -750,15 +768,33 @@ function Header({ meName, onSignOut, notifyCity, onSetCity, onHome, onInvite }) 
                   </p>
                 ) : (
                   <>
-                    <p className="hd-menu-hint">
-                      Les big events, les plans de ta ville, et les réactions sur les tiens.
-                    </p>
+                    {push.state !== "on" && (
+                      <p className="hd-menu-hint">
+                        Les big events, les plans de ta ville, et les réactions sur les tiens.
+                      </p>
+                    )}
                     <button type="button" className="inv-make" disabled={push.busy || push.state === "checking"}
                       onClick={push.state === "on" ? push.disable : push.enable}>
                       {push.busy ? "Un instant…"
                         : push.state === "on" ? "Couper les notifications"
                         : "Activer les notifications"}
                     </button>
+                    {push.state === "on" && onSetPrefs && (
+                      <div className="hd-menu-prefs">
+                        {PREFS.map(([k, label]) => (
+                          <button key={k} type="button" role="switch" aria-checked={prefs[k]}
+                            className={"pref" + (prefs[k] ? " on" : "")} onClick={() => flipPref(k)}>
+                            <span className="pref-box">{prefs[k] && <Check size={12} strokeWidth={3} />}</span>
+                            {label}
+                          </button>
+                        ))}
+                        {prefs.city && !city && (
+                          <p className="hd-menu-hint pref-warn">
+                            Choisis ta ville juste au-dessus, sinon celle-ci ne t&apos;enverra rien.
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </>
                 )}
                 {push.err && <p className="hd-menu-err">{push.err}</p>}
@@ -1601,6 +1637,12 @@ a{text-decoration:none;color:inherit;}
   font-weight:600;font-size:14px;margin-top:8px;}
 .inv-make:disabled{opacity:.55;}
 .inv-link{background:var(--accent-soft);color:var(--accent);}
+.hd-menu-prefs{display:flex;flex-direction:column;gap:2px;margin-top:10px;}
+.pref{display:flex;align-items:center;gap:9px;padding:7px 2px;font-size:13px;font-weight:600;color:var(--muted);text-align:left;background:none;border:0;}
+.pref.on{color:var(--ink);}
+.pref-box{flex-shrink:0;width:19px;height:19px;border-radius:6px;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;color:#fff;}
+.pref.on .pref-box{background:var(--accent);border-color:var(--accent);}
+.pref-warn{margin:6px 0 0;}
 .hd-menu-err{margin:8px 0 0;font-size:12px;line-height:1.45;color:#B91C1C;word-break:break-all;}
 .hd-menu-out{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);}
 .hd-menu-out button{width:100%;padding:11px;border-radius:12px;background:var(--bg);
