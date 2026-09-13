@@ -36,6 +36,12 @@ const CITIES = { Toulouse: "🌸", Bordeaux: "🍷", Paris: "🗼", Casablanca: 
 const CITY_LIST = Object.keys(CITIES);
 // Toute ville hors liste garde une épingle en guise d'emoji.
 const cityEmoji = (c) => CITIES[c] || "📍";
+// Initiales : une lettre par mot, deux au plus. « Ankara Messi » → AM,
+// « Kenny » → KE. Sert de pastille devant le nom, jamais à sa place.
+const initials = (name) => {
+  const w = String(name || "").trim().split(/\s+/).filter(Boolean);
+  return (w.length > 1 ? w[0][0] + w[1][0] : String(name || "").slice(0, 2)).toUpperCase();
+};
 // `time` dit quelle heure a du sens pour ce mode — et donc s'il faut
 // afficher le champ. Toujours facultatif.
 const TRANSPORT = {
@@ -783,7 +789,14 @@ function EventDetail({ ev, me, actions, availability, onBack }) {
         {["in", "maybe", "out"].map((k) => groups[k].length > 0 && (
           <div className="people" key={k}>
             <div className="people-label" style={{ color: RS[k].color }}>{RS[k].label} · {groups[k].length}</div>
-            <div className="avatars">{groups[k].map((n) => <span className="avatar" key={n} style={{ borderColor: RS[k].color }} title={nameOf(n)}>{nameOf(n).slice(0, 2).toUpperCase()}</span>)}</div>
+            {/* Le nom en entier : sur mobile une infobulle `title` ne s'ouvre
+                jamais, des initiales seules ne disent donc rien à personne. */}
+            <div className="avatars">{groups[k].map((n) => (
+              <span className="person" key={n} style={{ borderColor: RS[k].color }}>
+                <span className="person-ini" style={{ background: RS[k].color }}>{initials(nameOf(n))}</span>
+                <span className="person-name">{nameOf(n)}{n === me && " (toi)"}</span>
+              </span>
+            ))}</div>
           </div>
         ))}
 
@@ -1555,7 +1568,10 @@ a{text-decoration:none;color:inherit;}
 .people{margin:16px 0;}
 .people-label{font-weight:700;font-size:13.5px;font-family:'Bricolage Grotesque';margin-bottom:9px;}
 .avatars{display:flex;flex-wrap:wrap;gap:7px;}
-.avatar{width:40px;height:40px;border-radius:12px;background:var(--card);border:2px solid;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;font-family:'Bricolage Grotesque';color:var(--ink);}
+.person{display:inline-flex;align-items:center;gap:7px;max-width:100%;padding:4px 12px 4px 4px;border-radius:22px;background:var(--card);border:2px solid;}
+.person-ini{flex-shrink:0;width:27px;height:27px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;font-family:'Bricolage Grotesque';color:#fff;}
+/* anywhere : un blaze d'un seul tenant se coupe plutôt que de déborder. */
+.person-name{font-weight:600;font-size:13.5px;color:var(--ink);overflow-wrap:anywhere;}
 
 .block{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:15px;margin:14px 0;}
 .block-head{display:flex;align-items:center;gap:8px;font-family:'Bricolage Grotesque';font-weight:700;font-size:16px;color:var(--ink);margin-bottom:12px;}
