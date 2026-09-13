@@ -237,7 +237,14 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
   const [me, setMe] = useState(meFromAuth);
   const [tab, setTab] = useState("events");
   const [scale, setScale] = useState("big");
-  const [city, setCity] = useState("all");
+  // Un filtre de ville par échelle. Au quotidien, on part de la ville du
+  // profil : un plan resto à Bordeaux ne concerne pas qui vit à Toulouse.
+  // Les big events, eux, s'ouvrent sur « Toutes » — un ski se monte ailleurs
+  // que chez soi, et le filtrer par défaut le ferait disparaître.
+  const [cityBig, setCityBig] = useState("all");
+  const [cityDaily, setCityDaily] = useState(notifyCity || "all");
+  const city = scale === "big" ? cityBig : cityDaily;
+  const setCity = scale === "big" ? setCityBig : setCityDaily;
   const [events, setEvents] = useState([]);
   const [availability, setAvailability] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -311,9 +318,12 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
   // Les 5 villes habituelles, plus toute ville libre qui a au moins un event —
   // sinon un event à Lisbonne ne serait atteignable que par « Toutes ».
   const cityChips = useMemo(() => {
-    const extra = [...new Set(events.map((e) => e.city).filter((c) => c && !CITIES[c]))].sort();
+    // La ville du profil figure toujours, même sans event : sinon le filtre
+    // serait actif sans qu'aucune pastille ne montre laquelle est retenue.
+    const free = [...events.map((e) => e.city), notifyCity];
+    const extra = [...new Set(free.filter((c) => c && !CITIES[c]))].sort();
     return [...CITY_LIST, ...extra];
-  }, [events]);
+  }, [events, notifyCity]);
 
   // Toute action suit le même schéma : l'écran change tout de suite, l'écriture
   // part derrière, et si la base refuse on recharge pour revenir au vrai.
