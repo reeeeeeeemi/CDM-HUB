@@ -90,6 +90,12 @@ function fmtDate(d) {
   return new Date(d + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
 }
 const shortDate = (d) => new Date(d + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
+// Les créneaux d'un sondage peuvent tomber l'an prochain : l'année compte.
+const pollDate = (d) =>
+  new Date(d + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+const pollRange = (start, end) =>
+  !end || end === start ? pollDate(start) : `${pollDate(start)} – ${pollDate(end)}`;
+
 function fmtRange(start, end) {
   if (!start) return "Date à définir";
   if (!end || end === start) return fmtDate(start);
@@ -262,13 +268,14 @@ export default function App({ me: meFromAuth = null, onSignOut = null, notifyCit
     addTodo: (id, text, kind = "todo") => updateEvent(id, (e) => ({ ...e, todos: [...(e.todos || []), { id: uid(), text, kind, by: me, done: false }] })),
     toggleTodo: (id, tid) => updateEvent(id, (e) => ({ ...e, todos: (e.todos || []).map((t) => t.id === tid ? { ...t, done: !t.done, doneBy: !t.done ? me : null } : t) })),
     delTodo: (id, tid) => updateEvent(id, (e) => ({ ...e, todos: (e.todos || []).filter((t) => t.id !== tid) })),
-    addDate: (id, date) => updateEvent(id, (e) => ({ ...e, datePoll: [...(e.datePoll || []), { id: uid(), date, votes: [me] }] })),
+    addDate: (id, date, endDate = "") => updateEvent(id, (e) => ({ ...e, datePoll: [...(e.datePoll || []), { id: uid(), date, endDate, by: me, votes: [me] }] })),
+    delDate: (id, oid) => updateEvent(id, (e) => ({ ...e, datePoll: (e.datePoll || []).filter((o) => o.id !== oid) })),
     voteDate: (id, oid) => updateEvent(id, (e) => ({ ...e, datePoll: (e.datePoll || []).map((o) => o.id === oid ? { ...o, votes: o.votes.includes(me) ? o.votes.filter((v) => v !== me) : [...o.votes, me] } : o) })),
-    lockDate: (id, oid) => updateEvent(id, (e) => { const o = (e.datePoll || []).find((x) => x.id === oid); return o ? { ...e, date: o.date, endDate: "" } : e; }),
+    lockDate: (id, oid) => updateEvent(id, (e) => { const o = (e.datePoll || []).find((x) => x.id === oid); return o ? { ...e, date: o.date, endDate: o.endDate || "" } : e; }),
     setTransport: (id, entry) => updateEvent(id, (e) => ({ ...e, transport: [...(e.transport || []).filter((t) => t.by !== me), { id: uid(), by: me, ...entry }] })),
     delTransport: (id) => updateEvent(id, (e) => ({ ...e, transport: (e.transport || []).filter((t) => t.by !== me) })),
 
-    addPlace: (id, label, url) => updateEvent(id, (e) => ({ ...e, placePoll: [...(e.placePoll || []), { id: uid(), label, url, votes: [me] }] })),
+    addPlace: (id, label, url) => updateEvent(id, (e) => ({ ...e, placePoll: [...(e.placePoll || []), { id: uid(), label, url, by: me, votes: [me] }] })),
     votePlace: (id, oid) => updateEvent(id, (e) => ({ ...e, placePoll: (e.placePoll || []).map((o) => o.id === oid ? { ...o, votes: o.votes.includes(me) ? o.votes.filter((v) => v !== me) : [...o.votes, me] } : o) })),
     delPlace: (id, oid) => updateEvent(id, (e) => ({ ...e, placePoll: (e.placePoll || []).filter((o) => o.id !== oid) })),
     lockPlace: (id, oid) => updateEvent(id, (e) => { const o = (e.placePoll || []).find((x) => x.id === oid); return o ? { ...e, place: o.label, placeUrl: o.url || "" } : e; }),
@@ -708,7 +715,7 @@ function PlacePoll({ ev, me, isCreator, actions }) {
               {o.votes.length > 0 && <div className="pollnames">{o.votes.join(", ")}</div>}
             </div>
             {isCreator && <button className="polllock" onClick={() => actions.lockPlace(ev.id, o.id)} title="Figer ce lieu"><Lock size={14} /></button>}
-            {(isCreator || o.votes[0] === me) && <button className="tododel" onClick={() => actions.delPlace(ev.id, o.id)}><X size={15} /></button>}
+            {(isCreator || (o.by ?? o.votes[0]) === me) && <button className="tododel" title="Retirer ce lieu" onClick={() => actions.delPlace(ev.id, o.id)}><X size={15} /></button>}
           </div>
         );
       })}
@@ -782,33 +789,56 @@ function Hosting({ ev, me, actions }) {
 
 // ---------- sondage de dates ----------
 function DatePoll({ ev, me, isCreator, actions, availability }) {
+  const isBig = (ev.scale || "daily") === "big";
   const [d, setD] = useState("");
+  const [d2, setD2] = useState("");
   const poll = [...(ev.datePoll || [])].sort((a, b) => b.votes.length - a.votes.length);
-  const add = () => { if (!d) return; actions.addDate(ev.id, d); setD(""); };
-  const conflictsFor = (date) => [...new Set((availability || []).filter((a) => a.start <= date && (a.end || a.start) >= date).map((a) => a.by))];
+  const badRange = Boolean(d && d2 && d2 < d);
+  const add = () => {
+    if (!d || badRange) return;
+    actions.addDate(ev.id, d, isBig ? d2 : "");
+    setD(""); setD2("");
+  };
+  // Une indispo compte si elle recoupe le créneau, pas seulement son premier jour.
+  const conflictsFor = (from, to) => {
+    const last = to || from;
+    return [...new Set((availability || [])
+      .filter((a) => a.start <= last && (a.end || a.start) >= from)
+      .map((a) => a.by))];
+  };
   return (
     <section className="block">
       <div className="block-head"><CalendarClock size={17} /> Sondage de dates</div>
       {!ev.date && poll.length === 0 && <p className="block-hint">Pas encore de date. Proposez des créneaux, chacun vote pour ses dispos. Les indispos connues sont signalées.</p>}
-      {ev.date && <p className="block-hint">Date fixée : {fmtRange(ev.date, ev.endDate)}. Vous pouvez proposer d'autres créneaux.</p>}
+      {ev.date && <p className="block-hint">Date fixée : {fmtRange(ev.date, ev.endDate)}. Vous pouvez proposer d&apos;autres créneaux.</p>}
       {poll.map((o) => {
-        const voted = o.votes.includes(me); const conf = conflictsFor(o.date);
+        const voted = o.votes.includes(me);
+        const conf = conflictsFor(o.date, o.endDate);
         return (
           <div className="pollrow" key={o.id}>
             <button className={"pollvote" + (voted ? " on" : "")} onClick={() => actions.voteDate(ev.id, o.id)}><Check size={14} /> {o.votes.length}</button>
             <div className="pollinfo">
-              <b>{shortDate(o.date)}</b>
+              <b>{pollRange(o.date, o.endDate)}</b>
               {o.votes.length > 0 && <div className="pollnames">{o.votes.join(", ")}</div>}
               {conf.length > 0 && <div className="pollwarn"><AlertTriangle size={12} /> Indispo : {conf.join(", ")}</div>}
             </div>
-            {isCreator && <button className="polllock" onClick={() => actions.lockDate(ev.id, o.id)} title="Figer cette date"><Lock size={14} /></button>}
+            {isCreator && <button className="polllock" onClick={() => actions.lockDate(ev.id, o.id)} title="Figer ce créneau"><Lock size={14} /></button>}
+            {(isCreator || (o.by ?? o.votes[0]) === me) && <button className="tododel" title="Retirer ce créneau" onClick={() => actions.delDate(ev.id, o.id)}><X size={15} /></button>}
           </div>
         );
       })}
       <div className="polladd">
-        <input type="date" value={d} onChange={(e) => setD(e.target.value)} />
-        <button className="polladd-btn" onClick={add} disabled={!d}><Plus size={16} /></button>
+        <label className="polladd-f"><span>{isBig ? "Du" : "Date"}</span>
+          <input type="date" value={d} onChange={(e) => setD(e.target.value)} />
+        </label>
+        {isBig && (
+          <label className="polladd-f"><span>Au</span>
+            <input type="date" value={d2} min={d} onChange={(e) => setD2(e.target.value)} />
+          </label>
+        )}
+        <button className="polladd-btn" onClick={add} disabled={!d || badRange}><Plus size={16} /></button>
       </div>
+      {badRange && <p className="field-err" role="alert"><AlertTriangle size={14} /> La fin du créneau est avant son début.</p>}
     </section>
   );
 }
@@ -1398,7 +1428,13 @@ a{text-decoration:none;color:inherit;}
 .pollnames{color:var(--muted);font-size:12px;text-transform:none;margin-top:2px;}
 .pollwarn{display:flex;align-items:center;gap:4px;color:#D97706;font-size:12px;text-transform:none;margin-top:3px;font-weight:600;}
 .polllock{flex-shrink:0;width:34px;height:34px;border-radius:10px;background:var(--bg);color:var(--muted);display:flex;align-items:center;justify-content:center;border:1px solid var(--line);}
-.polladd{display:flex;gap:8px;margin-top:12px;}
+.polladd{display:flex;align-items:flex-end;gap:8px;margin-top:12px;}
+.polladd-f{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px;}
+.polladd-f span{font-size:12px;font-weight:600;color:var(--muted);}
+/* Même neutralisation que dans le formulaire : le contrôle natif iOS
+   impose sinon une largeur qui fait déborder la rangée. */
+.polladd-f input{flex:none;width:100%;min-width:0;-webkit-appearance:none;appearance:none;}
+.polladd-f input::-webkit-date-and-time-value{min-width:0;width:100%;text-align:left;margin:0;}
 .tp-at{display:block;font-size:12.5px;color:var(--muted);margin-top:2px;}
 .tp-time{display:flex;flex-direction:column;gap:6px;margin-top:8px;font-size:13.5px;font-weight:600;}
 .tp-time em{font-style:normal;font-weight:400;color:var(--muted);}
