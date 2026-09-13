@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
 import CrewHub from "./crew-hub";
+import { setNotifyCity } from "@/lib/actions/profile";
+
 import { signOut } from "./login/actions";
 import "./login/login.css";
 
@@ -22,7 +24,7 @@ export default async function Page() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("pseudo")
+    .select("pseudo, city")
     .eq("id", user.id)
     .single();
 
@@ -58,5 +60,12 @@ export default async function Page() {
     );
   }
 
-  return <CrewHub me={profile?.pseudo ?? "moi"} onSignOut={signOut} />;
+  return (
+    <CrewHub
+      me={profile?.pseudo ?? "moi"}
+      onSignOut={signOut}
+      notifyCity={profile?.city ?? ""}
+      onSetCity={setNotifyCity}
+    />
+  );
 }

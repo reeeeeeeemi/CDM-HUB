@@ -7,8 +7,8 @@
   --ink: #211d2b;
   --muted: #726c7e;
   --line: #e6e2d8;
-  --accent: #6d28d9;
-  --accent-soft: #ede6fb;
+  --accent: #b4451f;
+  --accent-soft: #fbebe4;
   --danger: #b91c1c;
   --danger-soft: #fdecec;
   --ok: #15803d;
@@ -18,9 +18,10 @@
   color: var(--ink);
   background: var(--bg);
   min-height: 100vh;
+  min-height: 100dvh;
   max-width: 560px;
   margin: 0 auto;
-  padding: 52px 26px;
+  padding: 52px 26px calc(52px + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -147,7 +148,7 @@
   transition: 0.15s;
 }
 
-.auth-submit:hover:not(:disabled) { background: #5b21b6; }
+.auth-submit:hover:not(:disabled) { background: #93360f; }
 .auth-submit:disabled { opacity: 0.5; cursor: default; }
 
 .auth-msg {
@@ -186,4 +187,4 @@
   text-underline-offset: 3px;
 }
 
-.auth-link:hover { color: #5b21b6; }
+.auth-link:hover { color: #93360f; }

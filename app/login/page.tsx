@@ -43,8 +43,8 @@ export default function LoginPage() {
         <>
           <h1 className="auth-title">HUB Events CDM</h1>
           <p className="auth-sub">
-            Le QG des plans de la bande. Ce qui arrive, ce qu&apos;on propose, qui est chaud —
-            Toulouse à Rome.
+            Pour retrouver tous les évènements organisés par le CDM, du voyage annuel au ski
+            jusqu&apos;à la coinche du mardi où Kenny est encore le pire joueur autour de la table.
           </p>
         </>
       )}
@@ -76,13 +76,13 @@ export default function LoginPage() {
       <form className="auth-form" action={action} key={mode}>
         {isSignUp && (
           <div className="auth-field">
-            <label htmlFor="pseudo">Ton petit nom</label>
+            <label htmlFor="pseudo">Ton blaze</label>
             <input
               id="pseudo"
               name="pseudo"
               type="text"
               autoComplete="nickname"
-              placeholder="Ex. Léo, Titi, Mecton…"
+              placeholder="Ex. Antoine Dupont, Ankara Messi, La brosse"
               required
             />
             <p className="auth-hint">C&apos;est ce que les autres verront à côté de tes plans.</p>

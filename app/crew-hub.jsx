@@ -6,6 +6,7 @@ import {
   X, Trash2, ArrowUp, Sparkles, Send, PartyPopper, Wallet, MessageCircle, Link2,
   ExternalLink, MessageSquare, ListTodo, CheckCircle2, Circle, CalendarClock, Lock,
   Car, Plane, TrainFront, UserPlus, Navigation, CalendarX, AlertTriangle, CalendarPlus,
+  House, Map as MapIcon, MapPinned, ShoppingCart, BedDouble,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ *
@@ -36,25 +37,34 @@ const CATS = {
   resto:   { label: "Resto",       color: "#EA580C", emoji: "🍽️" },
   picnic:  { label: "Pique-nique", color: "#65A30D", emoji: "🧺" },
   voyage:  { label: "Voyage",      color: "#2563EB", emoji: "✈️" },
-  chill:   { label: "Chill",       color: "#DB2777", emoji: "🛋️" },
+  coinche: { label: "Coinche",     color: "#DB2777", emoji: "🃏" },
   autre:   { label: "Autre",       color: "#64748B", emoji: "📌" },
 };
 const CITIES = { Toulouse: "🌸", Bordeaux: "🍷", Paris: "🗼", Casablanca: "🕌", Rome: "🏛️" };
 const CITY_LIST = Object.keys(CITIES);
+// Toute ville hors liste garde une épingle en guise d'emoji.
+const cityEmoji = (c) => CITIES[c] || "📍";
+// `time` dit quelle heure a du sens pour ce mode — et donc s'il faut
+// afficher le champ. Toujours facultatif.
 const TRANSPORT = {
-  voiture: { label: "Je conduis",        icon: Car,        color: "#0D9488", driver: true },
+  voiture: { label: "Je conduis",        icon: Car,        color: "#0D9488", driver: true, time: "depart" },
   covoit:  { label: "Cherche une place", icon: UserPlus,   color: "#D97706", seeker: true },
-  train:   { label: "En train",          icon: TrainFront, color: "#2563EB" },
-  avion:   { label: "En avion",          icon: Plane,      color: "#7C3AED" },
+  train:   { label: "En train",          icon: TrainFront, color: "#2563EB", time: "arrivee" },
+  avion:   { label: "En avion",          icon: Plane,      color: "#7C3AED", time: "arrivee" },
   autre:   { label: "Par mes moyens",    icon: Navigation, color: "#64748B" },
 };
+const TIME_LABEL = { depart: "Heure de départ", arrivee: "Heure d'arrivée sur place" };
+const TIME_SHORT = { depart: "part à", arrivee: "arrive à" };
 // modules par défaut selon le type d'event
-const MODULES_BIG   = { transport: true,  datePoll: true,  todos: true,  comments: true };
-const MODULES_DAILY = { transport: false, datePoll: false, todos: true,  comments: true };
+const MODULES_BIG   = { transport: true,  hosting: true,  datePoll: true,  placePoll: false, todos: true, courses: false, comments: true };
+const MODULES_DAILY = { transport: false, hosting: false, datePoll: false, placePoll: true,  todos: true, courses: false, comments: true };
 const MODULE_LABELS = [
   ["transport", "Qui y va comment"],
+  ["hosting", "Qui peut héberger"],
   ["datePoll", "Sondage de dates"],
-  ["todos", "Liste de courses"],
+  ["placePoll", "Sondage de lieu"],
+  ["todos", "To-Do"],
+  ["courses", "Liste de courses"],
   ["comments", "Commentaires"],
 ];
 
@@ -103,7 +113,9 @@ const RS = {
 const LINK_KINDS = {
   tricount:  { label: "Tricount",  icon: Wallet,        color: "#1BA0A6" },
   messenger: { label: "Messenger", icon: MessageCircle, color: "#0A7CFF" },
-  other:     { label: "Lien",      icon: Link2,         color: "#6D28D9" },
+  airbnb:    { label: "Airbnb",    icon: House,         color: "#FF5A5F" },
+  maps:      { label: "Google Maps", icon: MapIcon,     color: "#1A73E8" },
+  other:     { label: "Lien",      icon: Link2,         color: "#B4451F" },
 };
 const modOn = (ev, key) => (ev.modules || (ev.scale === "big" ? MODULES_BIG : MODULES_DAILY))[key] !== false;
 
@@ -157,9 +169,10 @@ function googleCalUrl(ev) {
  * `me` vient du compte connecté (voir app/page.tsx). Quand il est fourni,
  * l'écran Onboarding ne s'affiche plus : l'identité est déjà connue.
  *
- * @param {{ me?: string | null, onSignOut?: (() => void | Promise<void>) | null }} props
+ * @param {{ me?: string | null, onSignOut?: (() => void | Promise<void>) | null,
+ *          notifyCity?: string, onSetCity?: ((city: string) => void) | null }} props
  */
-export default function App({ me: meFromAuth = null, onSignOut = null }) {
+export default function App({ me: meFromAuth = null, onSignOut = null, notifyCity = "", onSetCity = null }) {
   const [me, setMe] = useState(meFromAuth);
   const [tab, setTab] = useState("events");
   const [scale, setScale] = useState("big");
@@ -198,6 +211,13 @@ export default function App({ me: meFromAuth = null, onSignOut = null }) {
     })();
   }, [meFromAuth]);
 
+  // Les 5 villes habituelles, plus toute ville libre qui a au moins un event —
+  // sinon un event à Lisbonne ne serait atteignable que par « Toutes ».
+  const cityChips = useMemo(() => {
+    const extra = [...new Set(events.map((e) => e.city).filter((c) => c && !CITIES[c]))].sort();
+    return [...CITY_LIST, ...extra];
+  }, [events]);
+
   const saveEvents = useCallback(async (n) => { setEvents(n); await sset("cdm:events", n, true); }, []);
   const saveProposals = useCallback(async (n) => { setProposals(n); await sset("cdm:proposals", n, true); }, []);
   const saveAvail = useCallback(async (n) => { setAvailability(n); await sset("cdm:availability", n, true); }, []);
@@ -208,7 +228,7 @@ export default function App({ me: meFromAuth = null, onSignOut = null }) {
   }, []);
 
   const addEvent = async (e) => {
-    await saveEvents([{ ...e, id: uid(), createdBy: me, createdAt: Date.now(), rsvps: { [me]: "in" }, comments: [], todos: [], datePoll: [], transport: [] }, ...events]);
+    await saveEvents([{ ...e, id: uid(), createdBy: me, createdAt: Date.now(), rsvps: { [me]: "in" }, comments: [], todos: [], datePoll: [], placePoll: [], transport: [], hosting: [] }, ...events]);
     setModal(null);
   };
   const delEvent = async (id) => { await saveEvents(events.filter((e) => e.id !== id)); setSelected(null); };
@@ -219,14 +239,22 @@ export default function App({ me: meFromAuth = null, onSignOut = null }) {
     setModule: (id, key, val) => updateEvent(id, (e) => ({ ...e, modules: { ...(e.modules || (e.scale === "big" ? MODULES_BIG : MODULES_DAILY)), [key]: val } })),
     addComment: (id, text) => updateEvent(id, (e) => ({ ...e, comments: [...(e.comments || []), { id: uid(), by: me, text, at: Date.now() }] })),
     delComment: (id, cid) => updateEvent(id, (e) => ({ ...e, comments: (e.comments || []).filter((c) => c.id !== cid) })),
-    addTodo: (id, text) => updateEvent(id, (e) => ({ ...e, todos: [...(e.todos || []), { id: uid(), text, by: me, done: false }] })),
+    addTodo: (id, text, kind = "todo") => updateEvent(id, (e) => ({ ...e, todos: [...(e.todos || []), { id: uid(), text, kind, by: me, done: false }] })),
     toggleTodo: (id, tid) => updateEvent(id, (e) => ({ ...e, todos: (e.todos || []).map((t) => t.id === tid ? { ...t, done: !t.done, doneBy: !t.done ? me : null } : t) })),
     delTodo: (id, tid) => updateEvent(id, (e) => ({ ...e, todos: (e.todos || []).filter((t) => t.id !== tid) })),
-    addDate: (id, date, time) => updateEvent(id, (e) => ({ ...e, datePoll: [...(e.datePoll || []), { id: uid(), date, time, votes: [me] }] })),
+    addDate: (id, date) => updateEvent(id, (e) => ({ ...e, datePoll: [...(e.datePoll || []), { id: uid(), date, votes: [me] }] })),
     voteDate: (id, oid) => updateEvent(id, (e) => ({ ...e, datePoll: (e.datePoll || []).map((o) => o.id === oid ? { ...o, votes: o.votes.includes(me) ? o.votes.filter((v) => v !== me) : [...o.votes, me] } : o) })),
-    lockDate: (id, oid) => updateEvent(id, (e) => { const o = (e.datePoll || []).find((x) => x.id === oid); return o ? { ...e, date: o.date, endDate: "", time: o.time || e.time } : e; }),
+    lockDate: (id, oid) => updateEvent(id, (e) => { const o = (e.datePoll || []).find((x) => x.id === oid); return o ? { ...e, date: o.date, endDate: "" } : e; }),
     setTransport: (id, entry) => updateEvent(id, (e) => ({ ...e, transport: [...(e.transport || []).filter((t) => t.by !== me), { id: uid(), by: me, ...entry }] })),
     delTransport: (id) => updateEvent(id, (e) => ({ ...e, transport: (e.transport || []).filter((t) => t.by !== me) })),
+
+    addPlace: (id, label, url) => updateEvent(id, (e) => ({ ...e, placePoll: [...(e.placePoll || []), { id: uid(), label, url, votes: [me] }] })),
+    votePlace: (id, oid) => updateEvent(id, (e) => ({ ...e, placePoll: (e.placePoll || []).map((o) => o.id === oid ? { ...o, votes: o.votes.includes(me) ? o.votes.filter((v) => v !== me) : [...o.votes, me] } : o) })),
+    delPlace: (id, oid) => updateEvent(id, (e) => ({ ...e, placePoll: (e.placePoll || []).filter((o) => o.id !== oid) })),
+    lockPlace: (id, oid) => updateEvent(id, (e) => { const o = (e.placePoll || []).find((x) => x.id === oid); return o ? { ...e, place: o.label, placeUrl: o.url || "" } : e; }),
+
+    setHosting: (id, entry) => updateEvent(id, (e) => ({ ...e, hosting: [...(e.hosting || []).filter((h) => h.by !== me), { id: uid(), by: me, ...entry }] })),
+    delHosting: (id) => updateEvent(id, (e) => ({ ...e, hosting: (e.hosting || []).filter((h) => h.by !== me) })),
   }), [me, updateEvent, events]);
 
   const addAvail = (o) => saveAvail([{ ...o, id: uid(), by: me }, ...availability]);
@@ -242,7 +270,7 @@ export default function App({ me: meFromAuth = null, onSignOut = null }) {
     const sc = p.scale || "daily";
     await saveEvents([{ id: uid(), title: p.title, category: p.category || "autre", scale: sc, city: p.city || "",
       date: "", endDate: "", time: "", endTime: "", place: "", description: p.note || "", links: [], createdBy: p.by, createdAt: Date.now(),
-      rsvps: { [me]: "in" }, comments: [], todos: [], datePoll: [], transport: [], modules: { ...(sc === "big" ? MODULES_BIG : MODULES_DAILY), datePoll: true } }, ...events]);
+      rsvps: { [me]: "in" }, comments: [], todos: [], datePoll: [], placePoll: [], transport: [], hosting: [], modules: { ...(sc === "big" ? MODULES_BIG : MODULES_DAILY), datePoll: true } }, ...events]);
     await saveProposals(proposals.filter((x) => x.id !== p.id));
     setTab("events"); setScale(sc);
   };
@@ -261,8 +289,6 @@ export default function App({ me: meFromAuth = null, onSignOut = null }) {
     return { up: keyed.filter((x) => !isPast(x.e)).map((x) => x.e), past: keyed.filter((x) => isPast(x.e)).reverse().map((x) => x.e) };
   }, [events, scale, city]);
 
-  const now = todayStr();
-  const totalUpcoming = events.filter((e) => !(e.endDate || e.date) || (e.endDate || e.date) >= now).length;
   const selectedEvent = events.find((e) => e.id === selected);
 
   return (
@@ -276,7 +302,7 @@ export default function App({ me: meFromAuth = null, onSignOut = null }) {
         <EventDetail ev={selectedEvent} me={me} actions={actions} availability={availability} onBack={() => setSelected(null)} />
       ) : (
         <>
-          <Header me={me} count={totalUpcoming} onSignOut={onSignOut} />
+          <Header me={me} onSignOut={onSignOut} notifyCity={notifyCity} onSetCity={onSetCity} />
           <Tabs tab={tab} setTab={setTab} propCount={proposals.length} newCount={newCities.size} />
           <main className="wrap">
             {tab === "events" && (
@@ -287,9 +313,9 @@ export default function App({ me: meFromAuth = null, onSignOut = null }) {
                 </div>
                 <div className="cities">
                   <button className={"citychip" + (city === "all" ? " on" : "")} onClick={() => pickCity("all")}>Toutes</button>
-                  {CITY_LIST.map((c) => (
+                  {cityChips.map((c) => (
                     <button key={c} className={"citychip" + (city === c ? " on" : "")} onClick={() => pickCity(c)}>
-                      {CITIES[c]} {c}{newCities.has(c) && <span className="dot" />}
+                      {cityEmoji(c)} {c}{newCities.has(c) && <span className="dot" />}
                     </button>
                   ))}
                 </div>
@@ -322,8 +348,8 @@ function Onboarding({ onPick }) {
       <div className="onb-kicker">CDM</div>
       <h1 className="onb-title">HUB Events CDM</h1>
       <p className="onb-sub">Le QG des plans de la bande. Ce qui arrive, ce qu'on propose, qui est chaud — Toulouse à Rome.</p>
-      <label className="onb-label">C'est quoi ton petit nom ?</label>
-      <input className="onb-input" value={name} autoFocus placeholder="Ex. Léo, Titi, Mecton…"
+      <label className="onb-label">C'est quoi ton blaze ?</label>
+      <input className="onb-input" value={name} autoFocus placeholder="Ex. Antoine Dupont, Ankara Messi, La brosse"
         onChange={(e) => setName(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && name.trim() && onPick(name.trim())} />
       <button className="btn-primary big" disabled={!name.trim()} onClick={() => onPick(name.trim())}>On y va <Send size={16} /></button>
@@ -333,20 +359,43 @@ function Onboarding({ onPick }) {
 }
 
 // ---------- header + tabs ----------
-function Header({ me, count, onSignOut }) {
+function Header({ me, onSignOut, notifyCity, onSetCity }) {
+  const [open, setOpen] = useState(false);
+  // Optimiste : la puce se coche tout de suite, l'enregistrement suit.
+  const [city, setCity] = useState(notifyCity || "");
+  const pick = (c) => { const next = city === c ? "" : c; setCity(next); onSetCity?.(next); };
   return (
     <header className="hd">
       <div>
-        <div className="hd-kicker"><Users size={13} /> HUB Events CDM</div>
-        <h1 className="hd-title">{count > 0 ? `${count} plan${count > 1 ? "s" : ""} en approche` : "Aucun plan… pour l'instant"}</h1>
+        <h1 className="hd-kicker"><Users size={13} /> HUB Events CDM</h1>
       </div>
-      {onSignOut ? (
-        <form action={onSignOut}>
-          <button type="submit" className="hd-me" title={`${me} — se déconnecter`}>{me.slice(0, 2).toUpperCase()}</button>
-        </form>
-      ) : (
-        <div className="hd-me" title={me}>{me.slice(0, 2).toUpperCase()}</div>
-      )}
+      <div className="hd-menu-wrap">
+        <button type="button" className="hd-me" aria-haspopup="menu" aria-expanded={open}
+          title={me} onClick={() => setOpen((o) => !o)}>{me.slice(0, 2).toUpperCase()}</button>
+        {open && (
+          <>
+            <div className="hd-backdrop" onClick={() => setOpen(false)} />
+            <div className="hd-menu" role="menu">
+              <div className="hd-menu-me">{me}</div>
+
+              <div className="hd-menu-sec">Me prévenir des events à</div>
+              <p className="hd-menu-hint">Tu seras signalé quand un plan est publié dans cette ville.</p>
+              <div className="hd-menu-cities">
+                {CITY_LIST.map((c) => (
+                  <button key={c} type="button" className={"catchip city" + (city === c ? " on" : "")}
+                    onClick={() => pick(c)}>{CITIES[c]} {c}</button>
+                ))}
+              </div>
+
+              {onSignOut && (
+                <form action={onSignOut} className="hd-menu-out">
+                  <button type="submit">Se déconnecter</button>
+                </form>
+              )}
+            </div>
+          </>
+        )}
+      </div>
     </header>
   );
 }
@@ -397,13 +446,16 @@ function EventCard({ ev, me, onOpen, past }) {
       <div className="card-body">
         <div className="card-top">
           <span className="tag" style={{ color: cat.color, background: cat.color + "18" }}>{cat.emoji} {cat.label}</span>
-          {noDate && !past ? <span className="cd poll"><CalendarClock size={12} /> Date à voter</span>
-            : cd && !past && <span className={"cd" + (cd.live ? " live" : cd.soon ? " hot" : "")}>{cd.text}</span>}
+          <span className="card-cds">
+            {noDate && !past ? <span className="cd poll"><CalendarClock size={12} /> Date à voter</span>
+              : cd && !past && <span className={"cd" + (cd.live ? " live" : cd.soon ? " hot" : "")}>{cd.text}</span>}
+            {!ev.place && modOn(ev, "placePoll") && !past && <span className="cd poll"><MapPinned size={12} /> Lieu à voter</span>}
+          </span>
         </div>
         <h3 className="card-title">{ev.title}</h3>
         <div className="card-meta">
           <span><CalendarDays size={14} /> {fmtRange(ev.date, ev.endDate)}{ev.time && !ev.endDate ? ` · ${ev.time}` : ""}</span>
-          {ev.city && <span>{CITIES[ev.city] || <MapPin size={14} />} {ev.city}</span>}
+          {ev.city && <span>{cityEmoji(ev.city)} {ev.city}</span>}
         </div>
         <div className="card-foot">
           <span className="count"><Users size={14} /> {going} chaud{going > 1 ? "s" : ""}</span>
@@ -434,10 +486,13 @@ function EventDetail({ ev, me, actions, availability, onBack }) {
         <div className="detail-tags">
           <span className="tag light">{cat.label}</span>
           {isBig && <span className="tag light"><Sparkles size={12} /> Big event</span>}
-          {ev.city && <span className="tag light">{CITIES[ev.city]} {ev.city}</span>}
+          {ev.city && <span className="tag light">{cityEmoji(ev.city)} {ev.city}</span>}
         </div>
         <h1 className="detail-title">{ev.title}</h1>
-        {ev.date ? (cd && !cd.past && <div className="detail-cd">{cd.text}</div>) : <div className="detail-cd"><CalendarClock size={13} /> Date à voter</div>}
+        <div className="detail-cds">
+          {ev.date ? (cd && !cd.past && <div className="detail-cd">{cd.text}</div>) : <div className="detail-cd"><CalendarClock size={13} /> Date à voter</div>}
+          {!ev.place && modOn(ev, "placePoll") && <div className="detail-cd"><MapPinned size={13} /> Lieu à voter</div>}
+        </div>
       </div>
 
       <div className="wrap">
@@ -451,21 +506,7 @@ function EventDetail({ ev, me, actions, availability, onBack }) {
           </div>
         )}
 
-        {ev.description && <p className="detail-desc">{ev.description}</p>}
-
-        {isBig && links.length > 0 && (
-          <div className="links-box">
-            <div className="links-title">Les liens du plan</div>
-            {links.map((l, i) => {
-              const k = LINK_KINDS[l.kind] || LINK_KINDS.other; const Icon = k.icon;
-              return (
-                <a key={i} className="link-btn" href={normUrl(l.url)} target="_blank" rel="noopener noreferrer" style={{ "--lc": k.color }}>
-                  <span className="link-ic"><Icon size={18} /></span><span className="link-lbl">{l.label || k.label}</span><ExternalLink size={15} className="link-out" />
-                </a>
-              );
-            })}
-          </div>
-        )}
+        {ev.description && <div className="detail-desc">{ev.description}</div>}
 
         <div className="rsvp-box">
           <div className="rsvp-q">Tu es chaud ?</div>
@@ -485,8 +526,26 @@ function EventDetail({ ev, me, actions, availability, onBack }) {
         ))}
 
         {modOn(ev, "transport") && <Transport ev={ev} me={me} actions={actions} />}
+        {modOn(ev, "hosting") && <Hosting ev={ev} me={me} actions={actions} />}
         {modOn(ev, "datePoll") && <DatePoll ev={ev} me={me} isCreator={isCreator} actions={actions} availability={availability} />}
-        {modOn(ev, "todos") && <TodoList ev={ev} me={me} isCreator={isCreator} actions={actions} />}
+        {modOn(ev, "placePoll") && <PlacePoll ev={ev} me={me} isCreator={isCreator} actions={actions} />}
+        {modOn(ev, "todos") && <TodoList ev={ev} me={me} isCreator={isCreator} actions={actions} kind="todo" />}
+        {modOn(ev, "courses") && <TodoList ev={ev} me={me} isCreator={isCreator} actions={actions} kind="course" />}
+
+        {links.length > 0 && (
+          <div className="links-box">
+            <div className="links-title">Les liens du plan</div>
+            {links.map((l, i) => {
+              const k = LINK_KINDS[l.kind] || LINK_KINDS.other; const Icon = k.icon;
+              return (
+                <a key={i} className="link-btn" href={normUrl(l.url)} target="_blank" rel="noopener noreferrer" style={{ "--lc": k.color }}>
+                  <span className="link-ic"><Icon size={18} /></span><span className="link-lbl">{l.label || k.label}</span><ExternalLink size={15} className="link-out" />
+                </a>
+              );
+            })}
+          </div>
+        )}
+
         {modOn(ev, "comments") && <Comments ev={ev} me={me} actions={actions} />}
 
         {isCreator && <ModuleToggles ev={ev} actions={actions} />}
@@ -504,10 +563,18 @@ function Transport({ ev, me, actions }) {
   const [editing, setEditing] = useState(false);
   const [mode, setMode] = useState(mine?.mode || "voiture");
   const [seats, setSeats] = useState(mine?.seats ? String(mine.seats) : "");
-  const [note, setNote] = useState(mine?.note || "");
+  const [at, setAt] = useState(mine?.at || "");
   const seatsOffered = list.filter((t) => t.mode === "voiture").reduce((s, t) => s + (Number(t.seats) || 0), 0);
   const seekers = list.filter((t) => t.mode === "covoit").length;
-  const save = () => { actions.setTransport(ev.id, { mode, seats: mode === "voiture" ? (Number(seats) || 0) : 0, note: note.trim() }); setEditing(false); };
+  const timeKind = TRANSPORT[mode]?.time;
+  const save = () => {
+    actions.setTransport(ev.id, {
+      mode,
+      seats: mode === "voiture" ? (Number(seats) || 0) : 0,
+      at: timeKind ? at : "",
+    });
+    setEditing(false);
+  };
   return (
     <section className="block">
       <div className="block-head"><Car size={17} /> Qui y va comment ?</div>
@@ -517,13 +584,17 @@ function Transport({ ev, me, actions }) {
           {seekers > 0 && <span>🙋 {seekers} cherche{seekers > 1 ? "nt" : ""} une place</span>}
         </div>
       )}
-      {list.length === 0 && !editing && <p className="block-hint">Dis comment tu comptes t'y rendre — pratique pour s'organiser en covoiturage.</p>}
+      {list.length === 0 && !editing && <p className="block-hint">Dis comment tu comptes t&apos;y rendre — pratique pour s&apos;organiser en covoiturage.</p>}
       {list.map((t) => {
         const m = TRANSPORT[t.mode] || TRANSPORT.autre; const Icon = m.icon;
         return (
           <div className="tprow" key={t.id}>
             <span className="tp-ic" style={{ background: m.color }}><Icon size={16} /></span>
-            <div className="tp-info"><b>{t.by}</b> · {m.label}{t.mode === "voiture" && t.seats > 0 && <span className="soft"> ({t.seats} place{t.seats > 1 ? "s" : ""})</span>}{t.note && <div className="tp-note">{t.note}</div>}</div>
+            <div className="tp-info">
+              <b>{t.by}</b> · {m.label}
+              {t.mode === "voiture" && t.seats > 0 && <span className="soft"> ({t.seats} place{t.seats > 1 ? "s" : ""})</span>}
+              {t.at && m.time && <span className="tp-at">{TIME_SHORT[m.time]} {t.at}</span>}
+            </div>
           </div>
         );
       })}
@@ -537,7 +608,12 @@ function Transport({ ev, me, actions }) {
             ))}
           </div>
           {mode === "voiture" && <input className="tp-seats" type="number" min="0" value={seats} placeholder="Places dispo" onChange={(e) => setSeats(e.target.value)} />}
-          <input className="tp-noteinput" value={note} placeholder="Départ d'où, à quelle heure… (optionnel)" onChange={(e) => setNote(e.target.value)} />
+          {timeKind && (
+            <label className="tp-time">
+              <span>{TIME_LABEL[timeKind]} <em>(optionnel)</em></span>
+              <input type="time" value={at} onChange={(e) => setAt(e.target.value)} />
+            </label>
+          )}
           <div className="tp-actions"><button className="btn-primary sm" onClick={save}>Enregistrer</button><button className="ghost-btn" onClick={() => setEditing(false)}>Annuler</button></div>
         </div>
       ) : (
@@ -550,11 +626,105 @@ function Transport({ ev, me, actions }) {
   );
 }
 
+// ---------- sondage de lieu ----------
+function PlacePoll({ ev, me, isCreator, actions }) {
+  const [label, setLabel] = useState("");
+  const [url, setUrl] = useState("");
+  const poll = [...(ev.placePoll || [])].sort((a, b) => b.votes.length - a.votes.length);
+  const add = () => { if (!label.trim()) return; actions.addPlace(ev.id, label.trim(), url.trim()); setLabel(""); setUrl(""); };
+  return (
+    <section className="block">
+      <div className="block-head"><MapPinned size={17} /> Sondage de lieu</div>
+      {poll.length === 0 && <p className="block-hint">Proposez des endroits avec leur lien Maps, chacun vote. Le créateur fige le gagnant.</p>}
+      {ev.place && poll.length > 0 && <p className="block-hint">Lieu fixé : {ev.place}. Vous pouvez proposer autre chose.</p>}
+      {poll.map((o) => {
+        const voted = o.votes.includes(me);
+        return (
+          <div className="pollrow" key={o.id}>
+            <button className={"pollvote" + (voted ? " on" : "")} onClick={() => actions.votePlace(ev.id, o.id)}><Check size={14} /> {o.votes.length}</button>
+            <div className="pollinfo">
+              <b>{o.label}</b>
+              {o.url && <a className="poll-maps" href={normUrl(o.url)} target="_blank" rel="noopener noreferrer"><MapIcon size={12} /> Voir sur Maps</a>}
+              {o.votes.length > 0 && <div className="pollnames">{o.votes.join(", ")}</div>}
+            </div>
+            {isCreator && <button className="polllock" onClick={() => actions.lockPlace(ev.id, o.id)} title="Figer ce lieu"><Lock size={14} /></button>}
+            {(isCreator || o.votes[0] === me) && <button className="tododel" onClick={() => actions.delPlace(ev.id, o.id)}><X size={15} /></button>}
+          </div>
+        );
+      })}
+      <div className="placeadd">
+        <input value={label} placeholder="Nom du lieu — Ex. Le Bibent" onChange={(e) => setLabel(e.target.value)} />
+        <div className="placeadd-row">
+          <input value={url} placeholder="Lien Google Maps (optionnel)" onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
+          <button className="addbtn" onClick={add} disabled={!label.trim()}><Plus size={18} /></button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ---------- hébergement ----------
+function Hosting({ ev, me, actions }) {
+  const list = ev.hosting || [];
+  const mine = list.find((h) => h.by === me);
+  const [editing, setEditing] = useState(false);
+  const [seeking, setSeeking] = useState(mine?.seeking ?? false);
+  const [spots, setSpots] = useState(mine?.spots ? String(mine.spots) : "");
+  const offered = list.filter((h) => !h.seeking).reduce((n, h) => n + (Number(h.spots) || 0), 0);
+  const seekers = list.filter((h) => h.seeking).length;
+  const save = () => {
+    actions.setHosting(ev.id, { seeking, spots: seeking ? 0 : (Number(spots) || 0) });
+    setEditing(false);
+  };
+  return (
+    <section className="block">
+      <div className="block-head"><BedDouble size={17} /> Qui peut héberger ?</div>
+      {(offered > 0 || seekers > 0) && (
+        <div className="tp-summary">
+          {offered > 0 && <span>🛏️ {offered} place{offered > 1 ? "s" : ""} proposée{offered > 1 ? "s" : ""}</span>}
+          {seekers > 0 && <span>🙋 {seekers} cherche{seekers > 1 ? "nt" : ""} un lit</span>}
+        </div>
+      )}
+      {list.length === 0 && !editing && <p className="block-hint">Dis si tu peux loger du monde, ou si tu cherches une place.</p>}
+      {list.map((h) => (
+        <div className="tprow" key={h.id}>
+          <span className="tp-ic" style={{ background: h.seeking ? "#D97706" : "#0D9488" }}>
+            {h.seeking ? <UserPlus size={16} /> : <BedDouble size={16} />}
+          </span>
+          <div className="tp-info">
+            <b>{h.by}</b> · {h.seeking ? "Cherche un lit" : "Peut héberger"}
+            {!h.seeking && h.spots > 0 && <span className="soft"> ({h.spots} place{h.spots > 1 ? "s" : ""})</span>}
+          </div>
+        </div>
+      ))}
+      {editing ? (
+        <div className="tp-edit">
+          <div className="catpick">
+            <button type="button" className={"catchip" + (!seeking ? " on" : "")}
+              style={!seeking ? { background: "#0D9488", borderColor: "#0D9488", color: "#fff" } : { color: "#0D9488", borderColor: "#0D948855" }}
+              onClick={() => setSeeking(false)}>Je peux héberger</button>
+            <button type="button" className={"catchip" + (seeking ? " on" : "")}
+              style={seeking ? { background: "#D97706", borderColor: "#D97706", color: "#fff" } : { color: "#D97706", borderColor: "#D9770655" }}
+              onClick={() => setSeeking(true)}>Je cherche un lit</button>
+          </div>
+          {!seeking && <input className="tp-seats" type="number" min="0" value={spots} placeholder="Places dispo" onChange={(e) => setSpots(e.target.value)} />}
+          <div className="tp-actions"><button className="btn-primary sm" onClick={save}>Enregistrer</button><button className="ghost-btn" onClick={() => setEditing(false)}>Annuler</button></div>
+        </div>
+      ) : (
+        <div className="tp-cta">
+          <button className="btn-soft" onClick={() => setEditing(true)}>{mine ? "Modifier" : "Me positionner"}</button>
+          {mine && <button className="ghost-btn danger" onClick={() => actions.delHosting(ev.id)}>Retirer</button>}
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ---------- sondage de dates ----------
 function DatePoll({ ev, me, isCreator, actions, availability }) {
-  const [d, setD] = useState(""); const [t, setT] = useState("");
+  const [d, setD] = useState("");
   const poll = [...(ev.datePoll || [])].sort((a, b) => b.votes.length - a.votes.length);
-  const add = () => { if (!d) return; actions.addDate(ev.id, d, t); setD(""); setT(""); };
+  const add = () => { if (!d) return; actions.addDate(ev.id, d); setD(""); };
   const conflictsFor = (date) => [...new Set((availability || []).filter((a) => a.start <= date && (a.end || a.start) >= date).map((a) => a.by))];
   return (
     <section className="block">
@@ -567,7 +737,7 @@ function DatePoll({ ev, me, isCreator, actions, availability }) {
           <div className="pollrow" key={o.id}>
             <button className={"pollvote" + (voted ? " on" : "")} onClick={() => actions.voteDate(ev.id, o.id)}><Check size={14} /> {o.votes.length}</button>
             <div className="pollinfo">
-              <b>{shortDate(o.date)}</b>{o.time && <span className="soft"> · {o.time}</span>}
+              <b>{shortDate(o.date)}</b>
               {o.votes.length > 0 && <div className="pollnames">{o.votes.join(", ")}</div>}
               {conf.length > 0 && <div className="pollwarn"><AlertTriangle size={12} /> Indispo : {conf.join(", ")}</div>}
             </div>
@@ -577,7 +747,6 @@ function DatePoll({ ev, me, isCreator, actions, availability }) {
       })}
       <div className="polladd">
         <input type="date" value={d} onChange={(e) => setD(e.target.value)} />
-        <input type="time" value={t} onChange={(e) => setT(e.target.value)} />
         <button className="polladd-btn" onClick={add} disabled={!d}><Plus size={16} /></button>
       </div>
     </section>
@@ -585,14 +754,23 @@ function DatePoll({ ev, me, isCreator, actions, availability }) {
 }
 
 // ---------- to-do / liste ----------
-function TodoList({ ev, me, isCreator, actions }) {
+// Une seule mécanique, deux listes : les tâches et les courses ne se
+// mélangent pas, mais se cochent pareil.
+const LIST_KINDS = {
+  todo:   { label: "To-Do",            icon: ListTodo,     hint: "Ce qu'il y a à faire — chacun peut cocher ce qu'il prend en charge.", ph: "Ex. Réserver l'Airbnb, appeler le resto…" },
+  course: { label: "Liste de courses", icon: ShoppingCart, hint: "Ce qu'il faut acheter — chacun coche ce qu'il ramène.",             ph: "Ex. Charbon, salade, enceinte…" },
+};
+
+function TodoList({ ev, me, isCreator, actions, kind = "todo" }) {
   const [text, setText] = useState("");
-  const todos = ev.todos || [];
-  const add = () => { if (!text.trim()) return; actions.addTodo(ev.id, text.trim()); setText(""); };
+  const conf = LIST_KINDS[kind];
+  const Icon = conf.icon;
+  const todos = (ev.todos || []).filter((t) => (t.kind || "todo") === kind);
+  const add = () => { if (!text.trim()) return; actions.addTodo(ev.id, text.trim(), kind); setText(""); };
   return (
     <section className="block">
-      <div className="block-head"><ListTodo size={17} /> À ramener / liste de courses</div>
-      {todos.length === 0 && <p className="block-hint">Ajoutez ce qu'il faut prévoir — chacun peut cocher ce qu'il prend en charge.</p>}
+      <div className="block-head"><Icon size={17} /> {conf.label}</div>
+      {todos.length === 0 && <p className="block-hint">{conf.hint}</p>}
       {todos.map((t) => (
         <div className={"todorow" + (t.done ? " done" : "")} key={t.id}>
           <button className="todocheck" onClick={() => actions.toggleTodo(ev.id, t.id)}>{t.done ? <CheckCircle2 size={20} /> : <Circle size={20} />}</button>
@@ -601,7 +779,7 @@ function TodoList({ ev, me, isCreator, actions }) {
         </div>
       ))}
       <div className="addrow">
-        <input value={text} placeholder="Ex. Charbon, salade, enceinte…" onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
+        <input value={text} placeholder={conf.ph} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
         <button className="addbtn" onClick={add} disabled={!text.trim()}><Plus size={18} /></button>
       </div>
     </section>
@@ -713,7 +891,7 @@ function ProposalsView({ proposals, me, onVote, onPromote }) {
           <div className="prop-tags">
             <span className="tag sm" style={{ color: cat.color, background: cat.color + "18" }}>{cat.emoji} {cat.label}</span>
             {p.scale === "big" && <span className="tag sm ghost"><Sparkles size={11} /> Big</span>}
-            {p.city && <span className="tag sm ghost">{CITIES[p.city]} {p.city}</span>}
+            {p.city && <span className="tag sm ghost">{cityEmoji(p.city)} {p.city}</span>}
           </div>
           <h3 className="prop-title">{p.title}</h3>
           {p.note && <p className="prop-note">{p.note}</p>}
@@ -725,7 +903,19 @@ function ProposalsView({ proposals, me, onVote, onPromote }) {
 }
 
 // ---------- form bits ----------
-function Field({ label, children, hint }) { return <label className="field"><span>{label}</span>{children}{hint && <em className="field-hint">{hint}</em>}</label>; }
+// Un <label> transmet tout clic reçu à son premier contrôle. Pour un champ
+// unique c'est ce qu'on veut ; pour un groupe de boutons ça cochait le
+// premier du lot dès qu'on cliquait à côté — d'où `group`, qui rend un div.
+function Field({ label, children, hint, group }) {
+  const Tag = group ? "div" : "label";
+  return (
+    <Tag className="field" {...(group ? { role: "group", "aria-label": label } : {})}>
+      <span>{label}</span>
+      {children}
+      {hint && <em className="field-hint">{hint}</em>}
+    </Tag>
+  );
+}
 function CatPicker({ value, onChange }) {
   return (
     <div className="catpick">
@@ -738,12 +928,25 @@ function CatPicker({ value, onChange }) {
   );
 }
 function CityPicker({ value, onChange }) {
+  // Une ville hors des 5 habituelles bascule le champ libre en mode ouvert.
+  const [free, setFree] = useState(Boolean(value) && !CITIES[value]);
   return (
-    <div className="catpick">
-      {CITY_LIST.map((c) => (
-        <button key={c} type="button" className={"catchip city" + (value === c ? " on" : "")} onClick={() => onChange(value === c ? "" : c)}>{CITIES[c]} {c}</button>
-      ))}
-    </div>
+    <>
+      <div className="catpick">
+        {CITY_LIST.map((c) => (
+          <button key={c} type="button" className={"catchip city" + (value === c ? " on" : "")}
+            onClick={() => { setFree(false); onChange(value === c ? "" : c); }}>{CITIES[c]} {c}</button>
+        ))}
+        <button type="button" className={"catchip city" + (free ? " on" : "")}
+          onClick={() => { const next = !free; setFree(next); if (!next) onChange(""); else if (CITIES[value]) onChange(""); }}>
+          📍 Autre…
+        </button>
+      </div>
+      {free && (
+        <input className="city-free" autoFocus value={CITIES[value] ? "" : value}
+          placeholder="Ex. Lisbonne, Berlin, Biarritz…" onChange={(e) => onChange(e.target.value)} />
+      )}
+    </>
   );
 }
 function ScaleSeg({ value, onChange }) {
@@ -759,7 +962,8 @@ function EventForm({ defScale, defCity, onClose, onSave }) {
   const [f, setF] = useState({
     title: "", category: "soiree", scale: defScale || "big", city: defCity || "",
     date: "", endDate: "", time: "", endTime: "", place: "", description: "",
-    usePoll: false, tricount: "", messenger: "", otherLabel: "", otherUrl: "",
+    usePoll: false, tricount: "", messenger: "", airbnb: "",
+    mapsLabel: "", mapsUrl: "", otherLabel: "", otherUrl: "",
     modules: { ...(defScale === "big" ? MODULES_BIG : MODULES_DAILY) },
   });
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
@@ -770,9 +974,12 @@ function EventForm({ defScale, defCity, onClose, onSave }) {
 
   const save = () => {
     const links = [];
+    // Maps sert sur tous les events ; le reste reste propre aux big.
+    if (f.mapsUrl.trim()) links.push({ kind: "maps", label: f.mapsLabel.trim() || "Google Maps", url: f.mapsUrl.trim() });
     if (isBig) {
       if (f.tricount.trim()) links.push({ kind: "tricount", label: "Tricount", url: f.tricount.trim() });
       if (f.messenger.trim()) links.push({ kind: "messenger", label: "Conv Messenger", url: f.messenger.trim() });
+      if (f.airbnb.trim()) links.push({ kind: "airbnb", label: "Airbnb", url: f.airbnb.trim() });
       if (f.otherUrl.trim()) links.push({ kind: "other", label: f.otherLabel.trim() || "Lien", url: f.otherUrl.trim() });
     }
     const endDate = isBig && f.endDate && f.endDate >= f.date ? f.endDate : "";
@@ -787,10 +994,10 @@ function EventForm({ defScale, defCity, onClose, onSave }) {
 
   return (
     <Modal title={isBig ? "Nouveau big event" : "Nouvel event quotidien"} onClose={onClose}>
-      <Field label="Nature de l'event"><ScaleSeg value={f.scale} onChange={switchScale} /></Field>
+      <Field group label="Nature de l'event"><ScaleSeg value={f.scale} onChange={switchScale} /></Field>
       <Field label="Ça s'appelle comment ?"><input value={f.title} onChange={set("title")} autoFocus placeholder={isBig ? "Ex. Nouvel An à Rome" : "Ex. Apéro du jeudi"} /></Field>
-      <Field label="Ville"><CityPicker value={f.city} onChange={(c) => setF({ ...f, city: c })} /></Field>
-      <Field label="Catégorie"><CatPicker value={f.category} onChange={(c) => setF({ ...f, category: c })} /></Field>
+      <Field group label="Ville"><CityPicker value={f.city} onChange={(c) => setF({ ...f, city: c })} /></Field>
+      <Field group label="Catégorie"><CatPicker value={f.category} onChange={(c) => setF({ ...f, category: c })} /></Field>
 
       {!f.usePoll && (isBig ? (
         <div className="row2">
@@ -815,7 +1022,7 @@ function EventForm({ defScale, defCity, onClose, onSave }) {
       <Field label="Où ?"><input value={f.place} onChange={set("place")} placeholder="Adresse, bar, lieu…" /></Field>
       <Field label="Détails (optionnel)"><textarea value={f.description} onChange={set("description")} rows={3} placeholder="Programme, ce qu'il faut ramener…" /></Field>
 
-      <Field label="Sections à activer" hint={isBig ? "Un big event a tout par défaut." : "Un event quotidien reste léger par défaut."}>
+      <Field group label="Sections à activer" hint={isBig ? "Un big event a tout par défaut." : "Un event quotidien reste léger par défaut."}>
         <div className="catpick">
           {MODULE_LABELS.map(([k, l]) => {
             const on = k === "datePoll" ? (f.usePoll || f.modules[k]) : f.modules[k];
@@ -826,13 +1033,22 @@ function EventForm({ defScale, defCity, onClose, onSave }) {
         </div>
       </Field>
 
+      <div className="links-form">
+        <div className="links-form-head"><MapIcon size={14} /> Lien Google Maps</div>
+        <div className="row2">
+          <Field label="Comment l'appeler"><input value={f.mapsLabel} onChange={set("mapsLabel")} placeholder="Ex. Point de RDV, Le resto…" /></Field>
+          <Field label="Lien Maps"><input value={f.mapsUrl} onChange={set("mapsUrl")} placeholder="maps.app.goo.gl/…" /></Field>
+        </div>
+      </div>
+
       {isBig && (
         <div className="links-form">
           <div className="links-form-head"><Sparkles size={14} /> Liens du plan <span>réservé aux big events</span></div>
           <Field label="Lien Tricount"><input value={f.tricount} onChange={set("tricount")} placeholder="tricount.com/…" /></Field>
           <Field label="Lien conv Messenger"><input value={f.messenger} onChange={set("messenger")} placeholder="m.me/… ou lien du groupe" /></Field>
+          <Field label="Lien Airbnb"><input value={f.airbnb} onChange={set("airbnb")} placeholder="airbnb.fr/rooms/…" /></Field>
           <div className="row2">
-            <Field label="Autre lien — nom"><input value={f.otherLabel} onChange={set("otherLabel")} placeholder="Ex. Playlist, Airbnb…" /></Field>
+            <Field label="Autre lien — nom"><input value={f.otherLabel} onChange={set("otherLabel")} placeholder="Ex. Playlist, billetterie…" /></Field>
             <Field label="Autre lien — URL"><input value={f.otherUrl} onChange={set("otherUrl")} placeholder="https://…" /></Field>
           </div>
         </div>
@@ -849,9 +1065,9 @@ function ProposalForm({ onClose, onSave }) {
   return (
     <Modal title="Proposer une idée" onClose={onClose}>
       <Field label="Ton idée"><input value={f.title} autoFocus onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="Ex. Week-end à Bordeaux cet été" /></Field>
-      <Field label="Nature"><ScaleSeg value={f.scale} onChange={(s) => setF({ ...f, scale: s })} /></Field>
-      <Field label="Ville (optionnel)"><CityPicker value={f.city} onChange={(c) => setF({ ...f, city: c })} /></Field>
-      <Field label="Catégorie"><CatPicker value={f.category} onChange={(c) => setF({ ...f, category: c })} /></Field>
+      <Field group label="Nature"><ScaleSeg value={f.scale} onChange={(s) => setF({ ...f, scale: s })} /></Field>
+      <Field group label="Ville (optionnel)"><CityPicker value={f.city} onChange={(c) => setF({ ...f, city: c })} /></Field>
+      <Field group label="Catégorie"><CatPicker value={f.category} onChange={(c) => setF({ ...f, category: c })} /></Field>
       <Field label="Un mot d'explication (optionnel)"><textarea value={f.note} rows={3} onChange={(e) => setF({ ...f, note: e.target.value })} placeholder="On pourrait…" /></Field>
       <button className="btn-primary big" disabled={!f.title.trim()} onClick={() => onSave({ ...f, title: f.title.trim() })}>Balancer l'idée</button>
     </Modal>
@@ -879,16 +1095,17 @@ function seedEvents() {
     { id: uid(), title: "Nouvel An à Rome 🇮🇹", category: "voyage", scale: "big", city: "Rome", date: d(20), endDate: d(23), time: "", endTime: "",
       place: "Trastevere", description: "Le gros plan de l'année. Réservez vos billets tôt.",
       links: [{ kind: "tricount", label: "Tricount", url: "https://tricount.com" }, { kind: "messenger", label: "Conv Messenger", url: "https://m.me" }],
-      createdBy: "CDM", createdAt: now, rsvps: { "CDM": "in" }, comments: [], todos: [{ id: uid(), text: "Réserver l'Airbnb", by: "CDM", done: false }],
-      datePoll: [], transport: [{ id: uid(), by: "CDM", mode: "avion", seats: 0, note: "Vol depuis Toulouse" }], modules: { ...MODULES_BIG } },
+      createdBy: "CDM", createdAt: now, rsvps: { "CDM": "in" }, comments: [], todos: [{ id: uid(), text: "Réserver l'Airbnb", kind: "todo", by: "CDM", done: false }],
+      datePoll: [], transport: [{ id: uid(), by: "CDM", mode: "avion", seats: 0, at: "14:30" }], hosting: [{ id: uid(), by: "CDM", seeking: false, spots: 2 }], modules: { ...MODULES_BIG } },
     { id: uid(), title: "Week-end rando (à caler)", category: "voyage", scale: "big", city: "Bordeaux", date: "", endDate: "", time: "", endTime: "",
       place: "", description: "On vise le printemps. Votez vos dispos !", links: [], createdBy: "CDM", createdAt: now,
       rsvps: { "CDM": "in" }, comments: [], todos: [], transport: [],
-      datePoll: [{ id: uid(), date: d(40), time: "", votes: ["CDM"] }, { id: uid(), date: d(54), time: "", votes: [] }], modules: { ...MODULES_BIG } },
+      datePoll: [{ id: uid(), date: d(40), votes: ["CDM"] }, { id: uid(), date: d(54), votes: [] }], modules: { ...MODULES_BIG } },
     { id: uid(), title: "Apéro du jeudi", category: "soiree", scale: "daily", city: "Toulouse", date: d(2), time: "19:30", endTime: "23:00", endDate: "",
-      place: "Chez Léo", description: "Le rituel.", links: [], createdBy: "CDM", createdAt: now, rsvps: { "CDM": "in" }, comments: [], todos: [], datePoll: [], transport: [], modules: { ...MODULES_DAILY } },
+      place: "Chez Léo", description: "Le rituel.", links: [], createdBy: "CDM", createdAt: now, rsvps: { "CDM": "in" }, comments: [], todos: [], datePoll: [], transport: [], hosting: [],
+      placePoll: [{ id: uid(), label: "Chez Léo", url: "", votes: ["CDM"] }, { id: uid(), label: "Le Bibent", url: "https://maps.app.goo.gl", votes: [] }], modules: { ...MODULES_DAILY } },
     { id: uid(), title: "Pique-nique au parc", category: "picnic", scale: "daily", city: "Paris", date: d(-3), time: "12:30", endTime: "16:00", endDate: "",
-      place: "Buttes-Chaumont", description: "C'était top !", links: [], createdBy: "CDM", createdAt: now, rsvps: { "CDM": "in" }, comments: [], todos: [], datePoll: [], transport: [], modules: { ...MODULES_DAILY } },
+      place: "Buttes-Chaumont", description: "C'était top !", links: [], createdBy: "CDM", createdAt: now, rsvps: { "CDM": "in" }, comments: [], todos: [], datePoll: [], transport: [], hosting: [], placePoll: [], modules: { ...MODULES_DAILY } },
   ];
 }
 function seedAvail() {
@@ -899,19 +1116,19 @@ function seedAvail() {
 // ---------- styles ----------
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Inter:wght@400;500;600&display=swap');
-.root{--bg:#F4F2ED;--card:#FFFFFF;--ink:#211D2B;--muted:#726C7E;--line:#E6E2D8;--accent:#6D28D9;--accent-soft:#EDE6FB;
-  font-family:'Inter',system-ui,sans-serif;color:var(--ink);background:var(--bg);min-height:100vh;max-width:560px;margin:0 auto;position:relative;-webkit-font-smoothing:antialiased;}
+.root{--bg:#F4F2ED;--card:#FFFFFF;--ink:#211D2B;--muted:#726C7E;--line:#E6E2D8;--accent:#B4451F;--accent-soft:#FBEBE4;
+  font-family:'Inter',system-ui,sans-serif;color:var(--ink);background:var(--bg);min-height:100vh;min-height:100dvh;max-width:560px;margin:0 auto;position:relative;-webkit-font-smoothing:antialiased;}
 *{box-sizing:border-box;}
 h1,h2,h3{font-family:'Bricolage Grotesque',sans-serif;margin:0;letter-spacing:-.02em;}
 button{font-family:inherit;cursor:pointer;border:none;background:none;}
 a{text-decoration:none;color:inherit;}
-.wrap{padding:14px 18px 120px;}
-.center{display:flex;justify-content:center;align-items:center;min-height:100vh;}
+.wrap{padding:14px 18px calc(120px + env(safe-area-inset-bottom));}
+.center{display:flex;justify-content:center;align-items:center;min-height:100vh;min-height:100dvh;}
 .spinner{width:34px;height:34px;border:3px solid var(--accent-soft);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
 
-.onb{padding:52px 26px;display:flex;flex-direction:column;min-height:100vh;justify-content:center;}
+.onb{padding:52px 26px;display:flex;flex-direction:column;min-height:100vh;min-height:100dvh;justify-content:center;}
 .onb-badge{width:64px;height:64px;border-radius:20px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;margin-bottom:20px;box-shadow:0 8px 24px -6px var(--accent);}
 .onb-kicker{font-family:'Bricolage Grotesque';font-weight:800;letter-spacing:.14em;color:var(--accent);font-size:13px;margin-bottom:4px;}
 .onb-title{font-size:40px;font-weight:800;line-height:1;}
@@ -921,10 +1138,23 @@ a{text-decoration:none;color:inherit;}
 .onb-input:focus{border-color:var(--accent);}
 .onb-note{color:var(--muted);font-size:12.5px;margin-top:14px;}
 
-.hd{display:flex;justify-content:space-between;align-items:flex-start;padding:24px 18px 12px;gap:12px;}
-.hd-kicker{display:inline-flex;align-items:center;gap:5px;color:var(--accent);font-weight:600;font-size:12.5px;background:var(--accent-soft);padding:4px 10px;border-radius:20px;}
+.hd{display:flex;justify-content:space-between;align-items:center;padding:22px 18px 12px;gap:12px;}
+.hd-kicker{display:inline-flex;align-items:center;gap:6px;color:var(--accent);font-weight:700;font-size:15px;letter-spacing:-.01em;background:var(--accent-soft);padding:7px 14px;border-radius:20px;}
 .hd-title{font-size:26px;font-weight:800;margin-top:9px;line-height:1.08;max-width:16ch;}
 .hd-me{flex-shrink:0;width:42px;height:42px;border-radius:14px;background:var(--ink);color:#fff;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;font-family:'Bricolage Grotesque';}
+.hd-menu-wrap{position:relative;flex-shrink:0;}
+.hd-backdrop{position:fixed;inset:0;z-index:40;}
+.hd-menu{position:absolute;top:calc(100% + 8px);right:0;z-index:41;width:min(290px,calc(100vw - 36px));
+  background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;
+  box-shadow:0 18px 40px -12px rgba(20,17,28,.28);animation:up .16s cubic-bezier(.2,.8,.2,1);}
+.hd-menu-me{font-family:'Bricolage Grotesque';font-weight:800;font-size:17px;margin-bottom:14px;}
+.hd-menu-sec{font-weight:700;font-size:13.5px;margin-bottom:3px;}
+.hd-menu-hint{color:var(--muted);font-size:12.5px;line-height:1.45;margin:0 0 10px;}
+.hd-menu-cities{display:flex;flex-wrap:wrap;gap:6px;}
+.hd-menu-out{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);}
+.hd-menu-out button{width:100%;padding:11px;border-radius:12px;background:var(--bg);
+  font-family:inherit;font-weight:600;font-size:14px;color:var(--muted);}
+.hd-menu-out button:hover{background:#EDEAE3;color:var(--ink);}
 
 .tabs{display:flex;gap:6px;padding:0 18px 4px;}
 .tab{display:flex;align-items:center;gap:6px;padding:9px 13px;border-radius:12px;font-weight:600;font-size:13.5px;color:var(--muted);transition:.15s;white-space:nowrap;}
@@ -949,7 +1179,8 @@ a{text-decoration:none;color:inherit;}
 .card.past{opacity:.66;}
 .card-stripe{width:6px;background:var(--cat);flex-shrink:0;}
 .card-body{padding:14px 16px;flex:1;min-width:0;}
-.card-top{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:9px;}
+.card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:9px;}
+.card-cds{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:5px;}
 .tag{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:4px 10px;border-radius:20px;white-space:nowrap;}
 .tag.sm{font-size:11.5px;padding:3px 9px;}
 .tag.ghost{background:var(--bg);color:var(--muted);}
@@ -973,7 +1204,7 @@ a{text-decoration:none;color:inherit;}
 .past-toggle.open{margin-bottom:12px;}
 .past-toggle.open svg{transform:rotate(180deg);}
 
-.detail{min-height:100vh;}
+.detail{min-height:100vh;min-height:100dvh;}
 .detail-hero{padding:16px 18px 30px;color:#fff;border-radius:0 0 26px 26px;}
 .detail-emoji{font-size:44px;margin:16px 0 10px;}
 .detail-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
@@ -981,11 +1212,12 @@ a{text-decoration:none;color:inherit;}
 .ghost-btn.light{background:rgba(255,255,255,.18);color:#fff;}
 .ghost-btn.danger{color:#DC2626;}
 .detail-title{font-size:29px;font-weight:800;line-height:1.05;}
-.detail-cd{display:inline-flex;align-items:center;gap:5px;margin-top:14px;background:rgba(255,255,255,.22);font-family:'Bricolage Grotesque';font-weight:700;padding:6px 14px;border-radius:12px;font-size:15px;}
+.detail-cds{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;}
+.detail-cd{display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,.22);font-family:'Bricolage Grotesque';font-weight:700;padding:6px 14px;border-radius:12px;font-size:15px;}
 .info-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);color:var(--accent);}
 .info-row div{color:var(--ink);font-size:15px;}
 .info-row .soft{color:var(--muted);font-weight:400;}
-.detail-desc{margin:16px 0;line-height:1.6;color:#443E52;font-size:15px;}
+.detail-desc{margin:18px 0;padding:14px 16px;border-left:3px solid var(--accent);background:var(--card);border-radius:0 14px 14px 0;line-height:1.6;color:var(--ink);font-size:16.5px;white-space:pre-wrap;}
 
 .cal-row{display:flex;gap:9px;margin-top:14px;}
 .cal-btn{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:11px;border-radius:12px;border:1.5px solid var(--line);background:var(--card);font-weight:600;font-size:13.5px;color:var(--ink);transition:.12s;}
@@ -1001,8 +1233,8 @@ a{text-decoration:none;color:inherit;}
 .link-lbl{flex:1;font-weight:600;font-size:14.5px;}
 .link-out{color:var(--muted);}
 
-.rsvp-box{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;margin:18px 0;}
-.rsvp-q{font-weight:700;font-family:'Bricolage Grotesque';font-size:16px;margin-bottom:12px;}
+.rsvp-box{background:var(--card);border:2px solid var(--accent);border-radius:18px;padding:18px;margin:18px 0;box-shadow:0 8px 24px -14px var(--accent);}
+.rsvp-q{font-weight:800;font-family:'Bricolage Grotesque';font-size:21px;letter-spacing:-.02em;margin-bottom:14px;color:var(--ink);}
 .rsvp-btns{display:flex;gap:8px;}
 .rsvp{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:12px 4px;border:2px solid var(--line);border-radius:13px;font-weight:600;font-size:12.5px;transition:.15s;background:var(--card);}
 .people{margin:16px 0;}
@@ -1022,7 +1254,7 @@ a{text-decoration:none;color:inherit;}
 .tp-info{font-size:14px;padding-top:4px;}
 .tp-note{color:var(--muted);font-size:12.5px;margin-top:2px;}
 .tp-edit{margin-top:12px;}
-.tp-seats,.tp-noteinput{width:100%;padding:11px 13px;border:2px solid var(--line);border-radius:12px;font-size:14.5px;background:var(--bg);outline:none;font-family:inherit;margin-top:10px;}
+.tp-seats,.tp-noteinput{width:100%;padding:11px 13px;border:2px solid var(--line);border-radius:12px;font-size:16px;background:var(--bg);outline:none;font-family:inherit;margin-top:10px;}
 .tp-seats:focus,.tp-noteinput:focus{border-color:var(--accent);}
 .tp-actions{display:flex;align-items:center;gap:10px;margin-top:12px;}
 .tp-cta{display:flex;align-items:center;gap:10px;margin-top:12px;}
@@ -1036,7 +1268,16 @@ a{text-decoration:none;color:inherit;}
 .pollwarn{display:flex;align-items:center;gap:4px;color:#D97706;font-size:12px;text-transform:none;margin-top:3px;font-weight:600;}
 .polllock{flex-shrink:0;width:34px;height:34px;border-radius:10px;background:var(--bg);color:var(--muted);display:flex;align-items:center;justify-content:center;border:1px solid var(--line);}
 .polladd{display:flex;gap:8px;margin-top:12px;}
-.polladd input{flex:1;min-width:0;padding:10px;border:2px solid var(--line);border-radius:11px;font-size:14px;background:var(--bg);outline:none;font-family:inherit;}
+.tp-at{display:block;font-size:12.5px;color:var(--muted);margin-top:2px;}
+.tp-time{display:flex;flex-direction:column;gap:6px;margin-top:8px;font-size:13.5px;font-weight:600;}
+.tp-time em{font-style:normal;font-weight:400;color:var(--muted);}
+.tp-time input{padding:11px 13px;border:2px solid var(--line);border-radius:12px;font-size:16px;font-family:inherit;background:var(--card);color:var(--ink);}
+.placeadd{display:flex;flex-direction:column;gap:8px;margin-top:12px;}
+.placeadd-row{display:flex;gap:8px;}
+.placeadd input{flex:1;min-width:0;padding:11px 13px;border:2px solid var(--line);border-radius:12px;font-size:16px;font-family:inherit;background:var(--card);color:var(--ink);}
+.poll-maps{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;font-weight:600;color:#1A73E8;margin-top:3px;}
+.city-free{width:100%;margin-top:8px;padding:12px 14px;border:2px solid var(--accent);border-radius:12px;font-size:16px;font-family:inherit;background:var(--card);color:var(--ink);outline:none;}
+.polladd input{flex:1;min-width:0;padding:10px;border:2px solid var(--line);border-radius:11px;font-size:16px;background:var(--bg);outline:none;font-family:inherit;}
 .polladd input:focus{border-color:var(--accent);}
 .polladd-btn{flex-shrink:0;width:42px;border-radius:11px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;}
 .polladd-btn:disabled{opacity:.4;}
@@ -1051,7 +1292,7 @@ a{text-decoration:none;color:inherit;}
 .tododel{flex-shrink:0;color:var(--muted);width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:8px;}
 
 .addrow{display:flex;gap:8px;margin-top:12px;}
-.addrow input{flex:1;min-width:0;padding:11px 13px;border:2px solid var(--line);border-radius:12px;font-size:14.5px;background:var(--bg);outline:none;font-family:inherit;}
+.addrow input{flex:1;min-width:0;padding:11px 13px;border:2px solid var(--line);border-radius:12px;font-size:16px;background:var(--bg);outline:none;font-family:inherit;}
 .addrow input:focus{border-color:var(--accent);}
 .addbtn{flex-shrink:0;width:44px;border-radius:12px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;}
 .addbtn:disabled{opacity:.4;}
@@ -1076,7 +1317,7 @@ a{text-decoration:none;color:inherit;}
 .availrow-info{flex:1;font-size:14px;}
 .avail-form{margin-top:12px;}
 .field.mini>span{font-size:12px;margin-bottom:5px;}
-.field.mini input{padding:10px 12px;font-size:14px;}
+.field.mini input{padding:10px 12px;font-size:16px;}
 
 .detail-by{color:var(--muted);font-size:13px;margin:22px 0 10px;}
 .del-btn{display:inline-flex;align-items:center;gap:7px;color:#DC2626;font-weight:600;font-size:14px;padding:10px 14px;border-radius:11px;border:1px solid #FCA5A5;background:#FEF2F2;}
@@ -1093,7 +1334,7 @@ a{text-decoration:none;color:inherit;}
 .soft{color:var(--muted);font-size:13px;}
 .promote{display:inline-flex;align-items:center;gap:5px;color:var(--accent);font-weight:600;font-size:13px;background:var(--accent-soft);padding:6px 11px;border-radius:10px;}
 
-.fab{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:8px;background:var(--accent);color:#fff;font-weight:700;font-size:15px;padding:14px 22px;border-radius:30px;box-shadow:0 10px 30px -6px var(--accent);z-index:20;font-family:'Bricolage Grotesque';white-space:nowrap;}
+.fab{position:fixed;bottom:calc(22px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:8px;background:var(--accent);color:#fff;font-weight:700;font-size:15px;padding:14px 22px;border-radius:30px;box-shadow:0 10px 30px -6px var(--accent);z-index:20;font-family:'Bricolage Grotesque';white-space:nowrap;}
 .fab:active{transform:translateX(-50%) scale(.97);}
 
 .empty{text-align:center;padding:54px 30px;}
@@ -1102,17 +1343,17 @@ a{text-decoration:none;color:inherit;}
 .empty p{color:var(--muted);line-height:1.5;max-width:32ch;margin:0 auto;font-size:14.5px;}
 
 .overlay{position:fixed;inset:0;background:rgba(20,17,28,.5);display:flex;align-items:flex-end;justify-content:center;z-index:50;animation:fade .2s;}
-.sheet{background:var(--bg);width:100%;max-width:560px;border-radius:24px 24px 0 0;max-height:92vh;overflow-y:auto;animation:up .25s cubic-bezier(.2,.8,.2,1);}
+.sheet{background:var(--bg);width:100%;max-width:560px;border-radius:24px 24px 0 0;max-height:92vh;max-height:92dvh;overflow-y:auto;animation:up .25s cubic-bezier(.2,.8,.2,1);}
 @keyframes fade{from{opacity:0;}}
 @keyframes up{from{transform:translateY(30px);}}
 .sheet-head{display:flex;justify-content:space-between;align-items:center;padding:20px 20px 6px;position:sticky;top:0;background:var(--bg);z-index:2;}
 .sheet-head h2{font-size:22px;font-weight:800;}
 .x{width:36px;height:36px;border-radius:50%;background:var(--card);display:flex;align-items:center;justify-content:center;color:var(--muted);border:1px solid var(--line);}
-.sheet-body{padding:12px 20px 30px;}
+.sheet-body{padding:12px 20px calc(30px + env(safe-area-inset-bottom));}
 .field{display:block;margin-bottom:16px;}
 .field>span{display:block;font-weight:600;font-size:13.5px;margin-bottom:7px;}
 .field-hint{display:block;color:var(--muted);font-size:12px;font-style:normal;margin-top:6px;}
-.field input,.field textarea{width:100%;padding:13px 14px;border:2px solid var(--line);border-radius:12px;font-size:15px;background:var(--card);outline:none;font-family:inherit;transition:border-color .15s;}
+.field input,.field textarea{width:100%;padding:13px 14px;border:2px solid var(--line);border-radius:12px;font-size:16px;background:var(--card);outline:none;font-family:inherit;transition:border-color .15s;}
 .field input:focus,.field textarea:focus{border-color:var(--accent);}
 .field textarea{resize:vertical;}
 .row2{display:flex;gap:12px;}
