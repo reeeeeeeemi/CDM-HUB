@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
-  Plus, Users, CalendarDays, Lightbulb, MapPin, ChevronLeft, ChevronDown, Check, HelpCircle,
-  X, Trash2, ArrowUp, Sparkles, Send, PartyPopper, Wallet, MessageCircle, Link2,
+  Plus, Users, CalendarDays, MapPin, ChevronLeft, ChevronDown, Check, HelpCircle,
+  X, Trash2, Sparkles, Send, Wallet, MessageCircle, Link2,
   ExternalLink, MessageSquare, ListTodo, CheckCircle2, Circle, CalendarClock, Lock,
   Car, Plane, TrainFront, UserPlus, Navigation, CalendarX, AlertTriangle, CalendarPlus,
   House, Map as MapIcon, MapPinned, ShoppingCart, BedDouble,
@@ -16,19 +16,11 @@ import {
  *  pour remplir les Dispos via free/busy. Apple = pas d'API propre.
  * ------------------------------------------------------------------ */
 
-// ---------- stockage ----------
-const memory = new Map();
-const hasStore = typeof window !== "undefined" && window.storage;
-async function sget(key, shared) {
-  try {
-    if (hasStore) { const r = await window.storage.get(key, shared); return r ? JSON.parse(r.value) : null; }
-    return memory.has(key) ? JSON.parse(memory.get(key)) : null;
-  } catch { return null; }
-}
-async function sset(key, value, shared) {
-  try { const v = JSON.stringify(value); if (hasStore) await window.storage.set(key, v, shared); else memory.set(key, v); }
-  catch (e) { console.error("storage set failed", e); }
-}
+// ---------- données ----------
+// Tout passe par lib/hub-data : la base est normalisée, l'interface travaille
+// sur la forme imbriquée héritée du prototype, et la traduction vit là-bas.
+import * as db from "@/lib/hub-data";
+import { nameOf } from "@/lib/hub-data";
 
 // ---------- config ----------
 const CATS = {
@@ -81,7 +73,9 @@ const MODULE_META = {
   comments:  { icon: MessageSquare, title: "Commentaires",        hint: "Le fil de discussion de l'event." },
 };
 
-const uid = () => Math.random().toString(36).slice(2, 9);
+// Les identifiants sont générés ici pour que l'affichage optimiste et la
+// ligne écrite en base portent le même id.
+const uid = () => crypto.randomUUID();
 const normUrl = (u) => (!u ? "" : /^https?:\/\//i.test(u) ? u : "https://" + u);
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
@@ -188,47 +182,53 @@ function googleCalUrl(ev) {
  * `me` vient du compte connecté (voir app/page.tsx). Quand il est fourni,
  * l'écran Onboarding ne s'affiche plus : l'identité est déjà connue.
  *
- * @param {{ me?: string | null, onSignOut?: (() => void | Promise<void>) | null,
+ * @param {{ me?: string | null, meName?: string, onSignOut?: (() => void | Promise<void>) | null,
  *          notifyCity?: string, onSetCity?: ((city: string) => void) | null }} props
  */
-export default function App({ me: meFromAuth = null, onSignOut = null, notifyCity = "", onSetCity = null }) {
+export default function App({ me: meFromAuth = null, meName = "", onSignOut = null, notifyCity = "", onSetCity = null }) {
   const [me, setMe] = useState(meFromAuth);
   const [tab, setTab] = useState("events");
   const [scale, setScale] = useState("big");
   const [city, setCity] = useState("all");
   const [events, setEvents] = useState([]);
-  const [proposals, setProposals] = useState([]);
   const [availability, setAvailability] = useState([]);
   const [selected, setSelected] = useState(null);
   const [modal, setModal] = useState(null);
   const [loading, setLoading] = useState(true);
   const [newCities, setNewCities] = useState(new Set());
 
+  const [loadError, setLoadError] = useState("");
+
+  const reload = useCallback(async () => {
+    try {
+      const { events: evs, availability: av } = await db.loadHub();
+      setEvents(evs);
+      setAvailability(av);
+      setLoadError("");
+      return evs;
+    } catch (e) {
+      setLoadError(e?.message || "Impossible de joindre le hub.");
+      return null;
+    }
+  }, []);
+
   useEffect(() => {
     (async () => {
-      const savedMe = meFromAuth ?? (await sget("cdm:me", false));
-      if (savedMe) setMe(savedMe);
-      let evs = await sget("cdm:events", true);
-      let avail = await sget("cdm:availability", true);
-      const seeded = await sget("cdm:seeded", true);
-      if (!seeded) {
-        evs = seedEvents(); avail = seedAvail();
-        await sset("cdm:events", evs, true);
-        await sset("cdm:availability", avail, true);
-        await sset("cdm:seeded", true, true);
+      if (meFromAuth) setMe(meFromAuth);
+      const evs = await reload();
+      // Signale les villes où un plan est apparu depuis la dernière visite.
+      // lastSeen reste local : c'est une préférence d'affichage, pas une donnée
+      // du groupe.
+      const lastSeen = Number(window.localStorage.getItem("cdm:lastSeen") || 0);
+      if (evs && meFromAuth && lastSeen) {
+        setNewCities(new Set(
+          evs.filter((e) => (e.createdAt || 0) > lastSeen && e.createdBy !== meFromAuth && e.city).map((e) => e.city)
+        ));
       }
-      setEvents(evs || []);
-      setAvailability(avail || []);
-      setProposals((await sget("cdm:proposals", true)) || []);
-      const lastSeen = await sget("cdm:lastSeen", false);
-      if (savedMe && lastSeen) {
-        const nc = new Set((evs || []).filter((e) => (e.createdAt || 0) > lastSeen && e.createdBy !== savedMe && e.city).map((e) => e.city));
-        setNewCities(nc);
-      }
-      await sset("cdm:lastSeen", Date.now(), false);
+      try { window.localStorage.setItem("cdm:lastSeen", String(Date.now())); } catch {}
       setLoading(false);
     })();
-  }, [meFromAuth]);
+  }, [meFromAuth, reload]);
 
   // Les 5 villes habituelles, plus toute ville libre qui a au moins un event —
   // sinon un event à Lisbonne ne serait atteignable que par « Toutes ».
@@ -237,73 +237,179 @@ export default function App({ me: meFromAuth = null, onSignOut = null, notifyCit
     return [...CITY_LIST, ...extra];
   }, [events]);
 
-  const saveEvents = useCallback(async (n) => { setEvents(n); await sset("cdm:events", n, true); }, []);
-  const saveProposals = useCallback(async (n) => { setProposals(n); await sset("cdm:proposals", n, true); }, []);
-  const saveAvail = useCallback(async (n) => { setAvailability(n); await sset("cdm:availability", n, true); }, []);
-  const pickName = async (name) => { setMe(name); await sset("cdm:me", name, false); };
+  // Toute action suit le même schéma : l'écran change tout de suite, l'écriture
+  // part derrière, et si la base refuse on recharge pour revenir au vrai.
+  const persist = useCallback(async (run) => {
+    const { error } = (await run()) || {};
+    if (error) { console.error(error); setLoadError(error.message); await reload(); }
+  }, [reload]);
 
   const updateEvent = useCallback((id, updater) => {
-    setEvents((prev) => { const next = prev.map((e) => (e.id === id ? updater(e) : e)); sset("cdm:events", next, true); return next; });
+    setEvents((prev) => prev.map((e) => (e.id === id ? updater(e) : e)));
   }, []);
 
   const addEvent = async (e) => {
-    await saveEvents([{ ...e, id: uid(), createdBy: me, createdAt: Date.now(), rsvps: { [me]: "in" }, comments: [], todos: [], datePoll: [], placePoll: [], transport: [], hosting: [] }, ...events]);
+    const row = { ...e, id: uid(), createdBy: me, createdAt: Date.now() };
+    setEvents((prev) => [{ ...row, rsvps: { [me]: "in" }, comments: [], todos: [], datePoll: [], placePoll: [], transport: [], hosting: [] }, ...prev]);
     setModal(null);
+    await persist(() => db.insertEvent(row, me));
+    // Le créateur est chaud par défaut : une ligne de plus, à part.
+    await persist(() => db.setRsvp(row.id, me, "in"));
   };
-  const delEvent = async (id) => { await saveEvents(events.filter((e) => e.id !== id)); setSelected(null); };
+
+  const delEvent = useCallback(async (id) => {
+    setEvents((prev) => prev.filter((e) => e.id !== id));
+    setSelected(null);
+    await persist(() => db.deleteEvent(id));
+  }, [persist]);
 
   const actions = useMemo(() => ({
     // Recliquer sur sa réponse la retire : on redevient « sans réponse »,
     // ce qui n'est pas la même chose que « pas dispo ».
-    rsvp: (id, s) => updateEvent(id, (e) => {
-      const next = { ...e.rsvps };
-      if (next[me] === s) delete next[me];
-      else next[me] = s;
-      return { ...e, rsvps: next };
-    }),
+    rsvp: (id, s) => {
+      let status = s;
+      updateEvent(id, (e) => {
+        const next = { ...e.rsvps };
+        if (next[me] === s) { delete next[me]; status = null; }
+        else next[me] = s;
+        return { ...e, rsvps: next };
+      });
+      persist(() => db.setRsvp(id, me, status));
+    },
     del: delEvent,
-    setModule: (id, key, val) => updateEvent(id, (e) => ({ ...e, modules: { ...(e.modules || (e.scale === "big" ? MODULES_BIG : MODULES_DAILY)), [key]: val } })),
-    addComment: (id, text) => updateEvent(id, (e) => ({ ...e, comments: [...(e.comments || []), { id: uid(), by: me, text, at: Date.now() }] })),
-    delComment: (id, cid) => updateEvent(id, (e) => ({ ...e, comments: (e.comments || []).filter((c) => c.id !== cid) })),
-    addTodo: (id, text, kind = "todo") => updateEvent(id, (e) => ({ ...e, todos: [...(e.todos || []), { id: uid(), text, kind, by: me, done: false }] })),
-    toggleTodo: (id, tid) => updateEvent(id, (e) => ({ ...e, todos: (e.todos || []).map((t) => t.id === tid ? { ...t, done: !t.done, doneBy: !t.done ? me : null } : t) })),
-    delTodo: (id, tid) => updateEvent(id, (e) => ({ ...e, todos: (e.todos || []).filter((t) => t.id !== tid) })),
-    addDate: (id, date, endDate = "") => updateEvent(id, (e) => ({ ...e, datePoll: [...(e.datePoll || []), { id: uid(), date, endDate, by: me, votes: [me] }] })),
-    delDate: (id, oid) => updateEvent(id, (e) => ({ ...e, datePoll: (e.datePoll || []).filter((o) => o.id !== oid) })),
-    voteDate: (id, oid) => updateEvent(id, (e) => ({ ...e, datePoll: (e.datePoll || []).map((o) => o.id === oid ? { ...o, votes: o.votes.includes(me) ? o.votes.filter((v) => v !== me) : [...o.votes, me] } : o) })),
-    lockDate: (id, oid) => updateEvent(id, (e) => { const o = (e.datePoll || []).find((x) => x.id === oid); return o ? { ...e, date: o.date, endDate: o.endDate || "" } : e; }),
-    setTransport: (id, entry) => updateEvent(id, (e) => ({ ...e, transport: [...(e.transport || []).filter((t) => t.by !== me), { id: uid(), by: me, ...entry }] })),
-    delTransport: (id) => updateEvent(id, (e) => ({ ...e, transport: (e.transport || []).filter((t) => t.by !== me) })),
+    setModule: (id, key, val) => {
+      let modules;
+      updateEvent(id, (e) => {
+        modules = { ...(e.modules || (e.scale === "big" ? MODULES_BIG : MODULES_DAILY)), [key]: val };
+        return { ...e, modules };
+      });
+      persist(() => db.patchEvent(id, { modules }));
+    },
 
-    addPlace: (id, label, url) => updateEvent(id, (e) => ({ ...e, placePoll: [...(e.placePoll || []), { id: uid(), label, url, by: me, votes: [me] }] })),
-    votePlace: (id, oid) => updateEvent(id, (e) => ({ ...e, placePoll: (e.placePoll || []).map((o) => o.id === oid ? { ...o, votes: o.votes.includes(me) ? o.votes.filter((v) => v !== me) : [...o.votes, me] } : o) })),
-    delPlace: (id, oid) => updateEvent(id, (e) => ({ ...e, placePoll: (e.placePoll || []).filter((o) => o.id !== oid) })),
-    lockPlace: (id, oid) => updateEvent(id, (e) => { const o = (e.placePoll || []).find((x) => x.id === oid); return o ? { ...e, place: o.label, placeUrl: o.url || "" } : e; }),
+    addComment: (id, text) => {
+      const cid = uid();
+      updateEvent(id, (e) => ({ ...e, comments: [...(e.comments || []), { id: cid, by: me, text, at: Date.now() }] }));
+      persist(() => db.addComment(cid, id, me, text));
+    },
+    delComment: (id, cid) => {
+      updateEvent(id, (e) => ({ ...e, comments: (e.comments || []).filter((c) => c.id !== cid) }));
+      persist(() => db.delComment(cid));
+    },
 
-    setHosting: (id, entry) => updateEvent(id, (e) => ({ ...e, hosting: [...(e.hosting || []).filter((h) => h.by !== me), { id: uid(), by: me, ...entry }] })),
-    delHosting: (id) => updateEvent(id, (e) => ({ ...e, hosting: (e.hosting || []).filter((h) => h.by !== me) })),
-  }), [me, updateEvent, events]);
+    addTodo: (id, text, kind = "todo") => {
+      const tid = uid();
+      updateEvent(id, (e) => ({ ...e, todos: [...(e.todos || []), { id: tid, text, kind, by: me, done: false }] }));
+      persist(() => db.addTodo(tid, id, me, text, kind));
+    },
+    toggleTodo: (id, tid) => {
+      let done;
+      updateEvent(id, (e) => ({ ...e, todos: (e.todos || []).map((t) => {
+        if (t.id !== tid) return t;
+        done = !t.done;
+        return { ...t, done, doneBy: done ? me : null };
+      }) }));
+      persist(() => db.setTodoDone(tid, done, me));
+    },
+    delTodo: (id, tid) => {
+      updateEvent(id, (e) => ({ ...e, todos: (e.todos || []).filter((t) => t.id !== tid) }));
+      persist(() => db.delTodo(tid));
+    },
+
+    addDate: (id, date, endDate = "") => {
+      const oid = uid();
+      updateEvent(id, (e) => ({ ...e, datePoll: [...(e.datePoll || []), { id: oid, date, endDate, by: me, votes: [me] }] }));
+      // Proposer, c'est voter pour : deux lignes, une seule intention.
+      persist(async () => {
+        const r = await db.addDateOption(oid, id, me, date, endDate);
+        return r.error ? r : await db.voteDate(oid, me, true);
+      });
+    },
+    delDate: (id, oid) => {
+      updateEvent(id, (e) => ({ ...e, datePoll: (e.datePoll || []).filter((o) => o.id !== oid) }));
+      persist(() => db.delDateOption(oid));
+    },
+    voteDate: (id, oid) => {
+      let on;
+      updateEvent(id, (e) => ({ ...e, datePoll: (e.datePoll || []).map((o) => {
+        if (o.id !== oid) return o;
+        on = !o.votes.includes(me);
+        return { ...o, votes: on ? [...o.votes, me] : o.votes.filter((v) => v !== me) };
+      }) }));
+      persist(() => db.voteDate(oid, me, on));
+    },
+    lockDate: (id, oid) => {
+      let patch;
+      updateEvent(id, (e) => {
+        const o = (e.datePoll || []).find((x) => x.id === oid);
+        if (!o) return e;
+        patch = { starts_on: o.date, ends_on: o.endDate || null };
+        return { ...e, date: o.date, endDate: o.endDate || "" };
+      });
+      if (patch) persist(() => db.patchEvent(id, patch));
+    },
+
+    setTransport: (id, entry) => {
+      updateEvent(id, (e) => ({ ...e, transport: [...(e.transport || []).filter((t) => t.by !== me), { id: me, by: me, ...entry }] }));
+      persist(() => db.setTransport(id, me, entry));
+    },
+    delTransport: (id) => {
+      updateEvent(id, (e) => ({ ...e, transport: (e.transport || []).filter((t) => t.by !== me) }));
+      persist(() => db.delTransport(id, me));
+    },
+
+    addPlace: (id, label, url) => {
+      const oid = uid();
+      updateEvent(id, (e) => ({ ...e, placePoll: [...(e.placePoll || []), { id: oid, label, url, by: me, votes: [me] }] }));
+      persist(async () => {
+        const r = await db.addPlaceOption(oid, id, me, label, url);
+        return r.error ? r : await db.votePlace(oid, me, true);
+      });
+    },
+    votePlace: (id, oid) => {
+      let on;
+      updateEvent(id, (e) => ({ ...e, placePoll: (e.placePoll || []).map((o) => {
+        if (o.id !== oid) return o;
+        on = !o.votes.includes(me);
+        return { ...o, votes: on ? [...o.votes, me] : o.votes.filter((v) => v !== me) };
+      }) }));
+      persist(() => db.votePlace(oid, me, on));
+    },
+    delPlace: (id, oid) => {
+      updateEvent(id, (e) => ({ ...e, placePoll: (e.placePoll || []).filter((o) => o.id !== oid) }));
+      persist(() => db.delPlaceOption(oid));
+    },
+    lockPlace: (id, oid) => {
+      let patch;
+      updateEvent(id, (e) => {
+        const o = (e.placePoll || []).find((x) => x.id === oid);
+        if (!o) return e;
+        patch = { place: o.label, place_url: o.url || null };
+        return { ...e, place: o.label, placeUrl: o.url || "" };
+      });
+      if (patch) persist(() => db.patchEvent(id, patch));
+    },
+
+    setHosting: (id, entry) => {
+      updateEvent(id, (e) => ({ ...e, hosting: [...(e.hosting || []).filter((h) => h.by !== me), { id: me, by: me, ...entry }] }));
+      persist(() => db.setHosting(id, me, entry));
+    },
+    delHosting: (id) => {
+      updateEvent(id, (e) => ({ ...e, hosting: (e.hosting || []).filter((h) => h.by !== me) }));
+      persist(() => db.delHosting(id, me));
+    },
+  }), [me, updateEvent, persist, delEvent]);
 
   /* eslint-disable @typescript-eslint/no-unused-vars --
-     L'onglet Dispos est en pause et l'onglet Idées a été retiré de la
-     navigation. Le code reste en place, prêt à être rebranché : le
-     supprimer ferait perdre une mécanique qui fonctionne. */
-  const addAvail = (o) => saveAvail([{ ...o, id: uid(), by: me }, ...availability]);
-  const delAvail = (id) => saveAvail(availability.filter((a) => a.id !== id));
-
-  const addProposal = async (p) => { await saveProposals([{ ...p, id: uid(), by: me, votes: [me] }, ...proposals]); setModal(null); };
-  const toggleVote = async (id) => saveProposals(proposals.map((p) => {
-    if (p.id !== id) return p;
-    const has = p.votes.includes(me);
-    return { ...p, votes: has ? p.votes.filter((v) => v !== me) : [...p.votes, me] };
-  }));
-  const promote = async (p) => {
-    const sc = p.scale || "daily";
-    await saveEvents([{ id: uid(), title: p.title, category: p.category || "autre", scale: sc, city: p.city || "",
-      date: "", endDate: "", time: "", endTime: "", place: "", description: p.note || "", links: [], createdBy: p.by, createdAt: Date.now(),
-      rsvps: { [me]: "in" }, comments: [], todos: [], datePoll: [], placePoll: [], transport: [], hosting: [], modules: { ...(sc === "big" ? MODULES_BIG : MODULES_DAILY), datePoll: true } }, ...events]);
-    await saveProposals(proposals.filter((x) => x.id !== p.id));
-    setTab("events"); setScale(sc);
+     L'onglet Dispos est en pause côté navigation, mais ses écritures sont
+     branchées : le rebrancher ne demandera qu'une ligne de rendu. */
+  const addAvail = (o) => {
+    const row = { ...o, id: uid(), by: me };
+    setAvailability((prev) => [row, ...prev]);
+    persist(() => db.addAvailability(row.id, me, o));
+  };
+  const delAvail = (id) => {
+    setAvailability((prev) => prev.filter((a) => a.id !== id));
+    persist(() => db.delAvailability(id));
   };
   /* eslint-enable @typescript-eslint/no-unused-vars */
 
@@ -331,16 +437,21 @@ export default function App({ me: meFromAuth = null, onSignOut = null, notifyCit
       <style>{CSS}</style>
       {loading ? (
         <div className="center"><div className="spinner" /></div>
-      ) : !me ? (
-        <Onboarding onPick={pickName} />
       ) : (
         <>
           {/* Le header reste en place partout : liste comme fiche d'event. */}
-          <Header me={me} onSignOut={onSignOut} notifyCity={notifyCity} onSetCity={onSetCity} onHome={goHome} />
+          <Header meName={meName} onSignOut={onSignOut} notifyCity={notifyCity} onSetCity={onSetCity} onHome={goHome} />
           {selectedEvent ? (
             <EventDetail ev={selectedEvent} me={me} actions={actions} availability={availability} onBack={() => setSelected(null)} />
           ) : (
             <>
+          {loadError && (
+            <div className="load-err" role="alert">
+              <AlertTriangle size={15} />
+              <span>{loadError}</span>
+              <button onClick={() => reload()}>Réessayer</button>
+            </div>
+          )}
           <Tabs tab={tab} setTab={setTab} newCount={newCities.size} />
           <main className="wrap">
             {tab === "events" && (
@@ -376,32 +487,13 @@ export default function App({ me: meFromAuth = null, onSignOut = null, notifyCit
         </>
       )}
       {modal === "event" && <EventForm defScale={scale} defCity={city !== "all" ? city : ""} onClose={() => setModal(null)} onSave={addEvent} />}
-      {modal === "proposal" && <ProposalForm onClose={() => setModal(null)} onSave={addProposal} />}
     </div>
   );
 }
 
-// ---------- onboarding ----------
-function Onboarding({ onPick }) {
-  const [name, setName] = useState("");
-  return (
-    <div className="onb">
-      <div className="onb-badge"><PartyPopper size={30} /></div>
-      <div className="onb-kicker">CDM</div>
-      <h1 className="onb-title">HUB Events CDM</h1>
-      <p className="onb-sub">Le QG des plans de la bande. Ce qui arrive, ce qu'on propose, qui est chaud — Toulouse à Rome.</p>
-      <label className="onb-label">C'est quoi ton blaze ?</label>
-      <input className="onb-input" value={name} autoFocus placeholder="Ex. Antoine Dupont, Ankara Messi, La brosse"
-        onChange={(e) => setName(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && name.trim() && onPick(name.trim())} />
-      <button className="btn-primary big" disabled={!name.trim()} onClick={() => onPick(name.trim())}>On y va <Send size={16} /></button>
-      <p className="onb-note">Ton nom sert juste à savoir qui vient et qui propose quoi.</p>
-    </div>
-  );
-}
 
 // ---------- header + tabs ----------
-function Header({ me, onSignOut, notifyCity, onSetCity, onHome }) {
+function Header({ meName, onSignOut, notifyCity, onSetCity, onHome }) {
   const [open, setOpen] = useState(false);
   const [stuck, setStuck] = useState(false);
 
@@ -424,12 +516,12 @@ function Header({ me, onSignOut, notifyCity, onSetCity, onHome }) {
       </h1>
       <div className="hd-menu-wrap">
         <button type="button" className="hd-me" aria-haspopup="menu" aria-expanded={open}
-          title={me} onClick={() => setOpen((o) => !o)}>{me.slice(0, 2).toUpperCase()}</button>
+          title={meName} onClick={() => setOpen((o) => !o)}>{meName.slice(0, 2).toUpperCase()}</button>
         {open && (
           <>
             <div className="hd-backdrop" onClick={() => setOpen(false)} />
             <div className="hd-menu" role="menu">
-              <div className="hd-menu-me">{me}</div>
+              <div className="hd-menu-me">{meName}</div>
 
               <div className="hd-menu-sec">Me prévenir des events à</div>
               <p className="hd-menu-hint">Tu seras signalé quand un plan est publié dans cette ville.</p>
@@ -577,7 +669,7 @@ function EventDetail({ ev, me, actions, availability, onBack }) {
         {["in", "maybe", "out"].map((k) => groups[k].length > 0 && (
           <div className="people" key={k}>
             <div className="people-label" style={{ color: RS[k].color }}>{RS[k].label} · {groups[k].length}</div>
-            <div className="avatars">{groups[k].map((n) => <span className="avatar" key={n} style={{ borderColor: RS[k].color }} title={n}>{n.slice(0, 2).toUpperCase()}</span>)}</div>
+            <div className="avatars">{groups[k].map((n) => <span className="avatar" key={n} style={{ borderColor: RS[k].color }} title={nameOf(n)}>{nameOf(n).slice(0, 2).toUpperCase()}</span>)}</div>
           </div>
         ))}
 
@@ -605,7 +697,7 @@ function EventDetail({ ev, me, actions, availability, onBack }) {
         {modOn(ev, "comments") && <Comments ev={ev} me={me} actions={actions} />}
 
         {isCreator && <ModuleToggles ev={ev} actions={actions} />}
-        <div className="detail-by">Créé par {ev.createdBy}</div>
+        <div className="detail-by">Créé par {nameOf(ev.createdBy)}</div>
         {isCreator && (confirmDel ? (
           <div className="del-confirm" role="alertdialog" aria-label="Confirmer la suppression">
             <p><AlertTriangle size={15} /> Supprimer «&nbsp;{ev.title}&nbsp;» ?</p>
@@ -658,7 +750,7 @@ function Transport({ ev, me, actions }) {
           <div className="tprow" key={t.id}>
             <span className="tp-ic" style={{ background: m.color }}><Icon size={16} /></span>
             <div className="tp-info">
-              <b>{t.by}</b> · {m.label}
+              <b>{nameOf(t.by)}</b> · {m.label}
               {t.mode === "voiture" && t.seats > 0 && <span className="soft"> ({t.seats} place{t.seats > 1 ? "s" : ""})</span>}
               {t.at && m.time && <span className="tp-at">{TIME_SHORT[m.time]} {t.at}</span>}
             </div>
@@ -712,7 +804,7 @@ function PlacePoll({ ev, me, isCreator, actions }) {
             <div className="pollinfo">
               <b>{o.label}</b>
               {o.url && <a className="poll-maps" href={normUrl(o.url)} target="_blank" rel="noopener noreferrer"><MapIcon size={12} /> Voir sur Maps</a>}
-              {o.votes.length > 0 && <div className="pollnames">{o.votes.join(", ")}</div>}
+              {o.votes.length > 0 && <div className="pollnames">{o.votes.map(nameOf).join(", ")}</div>}
             </div>
             {isCreator && <button className="polllock" onClick={() => actions.lockPlace(ev.id, o.id)} title="Figer ce lieu"><Lock size={14} /></button>}
             {(isCreator || (o.by ?? o.votes[0]) === me) && <button className="tododel" title="Retirer ce lieu" onClick={() => actions.delPlace(ev.id, o.id)}><X size={15} /></button>}
@@ -759,7 +851,7 @@ function Hosting({ ev, me, actions }) {
             {h.seeking ? <UserPlus size={16} /> : <BedDouble size={16} />}
           </span>
           <div className="tp-info">
-            <b>{h.by}</b> · {h.seeking ? "Cherche un lit" : "Peut héberger"}
+            <b>{nameOf(h.by)}</b> · {h.seeking ? "Cherche un lit" : "Peut héberger"}
             {!h.seeking && h.spots > 0 && <span className="soft"> ({h.spots} place{h.spots > 1 ? "s" : ""})</span>}
           </div>
         </div>
@@ -819,8 +911,8 @@ function DatePoll({ ev, me, isCreator, actions, availability }) {
             <button className={"pollvote" + (voted ? " on" : "")} onClick={() => actions.voteDate(ev.id, o.id)}><Check size={14} /> {o.votes.length}</button>
             <div className="pollinfo">
               <b>{pollRange(o.date, o.endDate)}</b>
-              {o.votes.length > 0 && <div className="pollnames">{o.votes.join(", ")}</div>}
-              {conf.length > 0 && <div className="pollwarn"><AlertTriangle size={12} /> Indispo : {conf.join(", ")}</div>}
+              {o.votes.length > 0 && <div className="pollnames">{o.votes.map(nameOf).join(", ")}</div>}
+              {conf.length > 0 && <div className="pollwarn"><AlertTriangle size={12} /> Indispo : {conf.map(nameOf).join(", ")}</div>}
             </div>
             {isCreator && <button className="polllock" onClick={() => actions.lockDate(ev.id, o.id)} title="Figer ce créneau"><Lock size={14} /></button>}
             {(isCreator || (o.by ?? o.votes[0]) === me) && <button className="tododel" title="Retirer ce créneau" onClick={() => actions.delDate(ev.id, o.id)}><X size={15} /></button>}
@@ -864,7 +956,7 @@ function TodoList({ ev, me, isCreator, actions, kind = "todo" }) {
       {todos.map((t) => (
         <div className={"todorow" + (t.done ? " done" : "")} key={t.id}>
           <button className="todocheck" onClick={() => actions.toggleTodo(ev.id, t.id)}>{t.done ? <CheckCircle2 size={20} /> : <Circle size={20} />}</button>
-          <div className="todotext"><span>{t.text}</span><small>{t.done ? `pris par ${t.doneBy}` : `ajouté par ${t.by}`}</small></div>
+          <div className="todotext"><span>{t.text}</span><small>{t.done ? `pris par ${nameOf(t.doneBy)}` : `ajouté par ${nameOf(t.by)}`}</small></div>
           {(t.by === me || isCreator) && <button className="tododel" onClick={() => actions.delTodo(ev.id, t.id)}><X size={15} /></button>}
         </div>
       ))}
@@ -889,7 +981,7 @@ function Comments({ ev, me, actions }) {
         <div className="cmt" key={c.id}>
           <span className="cmt-av">{c.by.slice(0, 2).toUpperCase()}</span>
           <div className="cmt-body">
-            <div className="cmt-head"><b>{c.by}</b><span className="soft">{timeAgo(c.at)}</span>{c.by === me && <button className="cmt-del" onClick={() => actions.delComment(ev.id, c.id)}><X size={13} /></button>}</div>
+            <div className="cmt-head"><b>{nameOf(c.by)}</b><span className="soft">{timeAgo(c.at)}</span>{c.by === me && <button className="cmt-del" onClick={() => actions.delComment(ev.id, c.id)}><X size={13} /></button>}</div>
             <p>{c.text}</p>
           </div>
         </div>
@@ -960,7 +1052,7 @@ function AvailabilityView({ availability, me, onAdd, onDel }) {
       ) : (
         Object.entries(byPerson).map(([person, arr]) => (
           <div className="block" key={person}>
-            <div className="block-head"><span className="cmt-av">{person.slice(0, 2).toUpperCase()}</span> {person}</div>
+            <div className="block-head"><span className="cmt-av">{nameOf(person).slice(0, 2).toUpperCase()}</span> {nameOf(person)}</div>
             {arr.map((a) => (<div className="availrow" key={a.id}><div className="availrow-info"><b>{fmtRange(a.start, a.end)}</b>{a.note && <span className="soft"> · {a.note}</span>}</div></div>))}
           </div>
         ))
@@ -969,32 +1061,6 @@ function AvailabilityView({ availability, me, onAdd, onDel }) {
   );
 }
 
-// ---------- proposals ----------
-// Conservé tel quel : onglet Idées retiré de la navigation. Rebranchable sans réécriture.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function ProposalsView({ proposals, me, onVote, onPromote }) {
-  if (proposals.length === 0)
-    return <Empty icon={<Lightbulb size={26} />} title="Aucune idée sur la table" text="Balance une proposition, les autres votent. Si ça prend (2+ votes), tu la transformes en event." />;
-  const sorted = [...proposals].sort((a, b) => b.votes.length - a.votes.length);
-  return sorted.map((p) => {
-    const cat = CATS[p.category] || CATS.autre; const voted = p.votes.includes(me);
-    return (
-      <div className="prop" key={p.id}>
-        <button className={"vote" + (voted ? " on" : "")} onClick={() => onVote(p.id)}><ArrowUp size={18} strokeWidth={2.6} /><b>{p.votes.length}</b></button>
-        <div className="prop-body">
-          <div className="prop-tags">
-            <span className="tag sm" style={{ color: cat.color, background: cat.color + "18" }}>{cat.emoji} {cat.label}</span>
-            {p.scale === "big" && <span className="tag sm ghost"><Sparkles size={11} /> Big</span>}
-            {p.city && <span className="tag sm ghost">{cityEmoji(p.city)} {p.city}</span>}
-          </div>
-          <h3 className="prop-title">{p.title}</h3>
-          {p.note && <p className="prop-note">{p.note}</p>}
-          <div className="prop-foot"><span className="soft">par {p.by}</span>{p.votes.length >= 2 && <button className="promote" onClick={() => onPromote(p)}><Sparkles size={14} /> En faire un event</button>}</div>
-        </div>
-      </div>
-    );
-  });
-}
 
 // ---------- form bits ----------
 // Un <label> transmet tout clic reçu à son premier contrôle. Pour un champ
@@ -1212,19 +1278,6 @@ function EventForm({ defScale, defCity, onClose, onSave }) {
   );
 }
 
-function ProposalForm({ onClose, onSave }) {
-  const [f, setF] = useState({ title: "", category: "autre", scale: "daily", city: "", note: "" });
-  return (
-    <Modal title="Proposer une idée" onClose={onClose}>
-      <Field label="Ton idée"><input value={f.title} autoFocus onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="Ex. Week-end à Bordeaux cet été" /></Field>
-      <Field group label="Nature"><ScaleSeg value={f.scale} onChange={(s) => setF({ ...f, scale: s })} /></Field>
-      <Field group label="Ville (optionnel)"><CityPicker value={f.city} onChange={(c) => setF({ ...f, city: c })} /></Field>
-      <Field group label="Catégorie"><CatPicker value={f.category} onChange={(c) => setF({ ...f, category: c })} /></Field>
-      <Field label="Un mot d'explication (optionnel)"><textarea value={f.note} rows={3} onChange={(e) => setF({ ...f, note: e.target.value })} placeholder="On pourrait…" /></Field>
-      <button className="btn-primary big" disabled={!f.title.trim()} onClick={() => onSave({ ...f, title: f.title.trim() })}>Balancer l'idée</button>
-    </Modal>
-  );
-}
 
 // ---------- shared UI ----------
 function Modal({ title, children, onClose }) {
@@ -1239,31 +1292,6 @@ function Modal({ title, children, onClose }) {
 }
 function Empty({ icon, title, text }) { return <div className="empty"><div className="empty-ic">{icon}</div><h3>{title}</h3><p>{text}</p></div>; }
 
-// ---------- seed ----------
-function seedEvents() {
-  const d = (n) => { const x = new Date(); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
-  const now = Date.now();
-  return [
-    { id: uid(), title: "Nouvel An à Rome 🇮🇹", category: "voyage", scale: "big", city: "Rome", date: d(20), endDate: d(23), time: "", endTime: "",
-      place: "Trastevere", description: "Le gros plan de l'année. Réservez vos billets tôt.",
-      links: [{ kind: "tricount", label: "Tricount", url: "https://tricount.com" }, { kind: "messenger", label: "Conv Messenger", url: "https://m.me" }],
-      createdBy: "CDM", createdAt: now, rsvps: { "CDM": "in" }, comments: [], todos: [{ id: uid(), text: "Réserver l'Airbnb", kind: "todo", by: "CDM", done: false }],
-      datePoll: [], transport: [{ id: uid(), by: "CDM", mode: "avion", seats: 0, at: "14:30" }], hosting: [{ id: uid(), by: "CDM", seeking: false, spots: 2 }], modules: { ...MODULES_BIG } },
-    { id: uid(), title: "Week-end rando (à caler)", category: "voyage", scale: "big", city: "Bordeaux", date: "", endDate: "", time: "", endTime: "",
-      place: "", description: "On vise le printemps. Votez vos dispos !", links: [], createdBy: "CDM", createdAt: now,
-      rsvps: { "CDM": "in" }, comments: [], todos: [], transport: [],
-      datePoll: [{ id: uid(), date: d(40), votes: ["CDM"] }, { id: uid(), date: d(54), votes: [] }], modules: { ...MODULES_BIG } },
-    { id: uid(), title: "Apéro du jeudi", category: "soiree", scale: "daily", city: "Toulouse", date: d(2), time: "19:30", endTime: "23:00", endDate: "",
-      place: "Chez Léo", description: "Le rituel.", links: [], createdBy: "CDM", createdAt: now, rsvps: { "CDM": "in" }, comments: [], todos: [], datePoll: [], transport: [], hosting: [],
-      placePoll: [{ id: uid(), label: "Chez Léo", url: "", votes: ["CDM"] }, { id: uid(), label: "Le Bibent", url: "https://maps.app.goo.gl", votes: [] }], modules: { ...MODULES_DAILY } },
-    { id: uid(), title: "Pique-nique au parc", category: "picnic", scale: "daily", city: "Paris", date: d(-3), time: "12:30", endTime: "16:00", endDate: "",
-      place: "Buttes-Chaumont", description: "C'était top !", links: [], createdBy: "CDM", createdAt: now, rsvps: { "CDM": "in" }, comments: [], todos: [], datePoll: [], transport: [], hosting: [], placePoll: [], modules: { ...MODULES_DAILY } },
-  ];
-}
-function seedAvail() {
-  const d = (n) => { const x = new Date(); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
-  return [{ id: uid(), by: "CDM", start: d(40), end: d(41), note: "Déjà pris ce week-end" }];
-}
 
 // ---------- styles ----------
 const CSS = `
@@ -1315,6 +1343,11 @@ a{text-decoration:none;color:inherit;}
 .hd-menu-out button:hover{background:#EDEAE3;color:var(--ink);}
 
 .tabs{display:flex;gap:6px;padding:0 18px 4px;}
+.load-err{display:flex;align-items:center;gap:9px;margin:0 18px 10px;padding:11px 13px;border-radius:12px;
+  background:#FDECEC;color:#B91C1C;font-size:13px;font-weight:600;line-height:1.4;}
+.load-err span{flex:1;min-width:0;}
+.load-err button{flex-shrink:0;padding:6px 11px;border-radius:9px;background:#B91C1C;color:#fff;
+  font-family:inherit;font-weight:600;font-size:12.5px;}
 .tab{display:flex;align-items:center;gap:6px;padding:9px 13px;border-radius:12px;font-weight:600;font-size:13.5px;color:var(--muted);transition:.15s;white-space:nowrap;}
 .tab.on{background:var(--ink);color:#fff;}
 .pill{background:var(--accent);color:#fff;font-size:11px;font-weight:700;padding:1px 7px;border-radius:10px;}

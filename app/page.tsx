@@ -60,9 +60,12 @@ export default async function Page() {
     );
   }
 
+  // `me` est l'identifiant : c'est lui qui sert aux comparaisons et qui part
+  // en base. Le pseudo ne sert qu'à l'affichage.
   return (
     <CrewHub
-      me={profile?.pseudo ?? "moi"}
+      me={user.id}
+      meName={profile?.pseudo ?? "moi"}
       onSignOut={signOut}
       notifyCity={profile?.city ?? ""}
       onSetCity={setNotifyCity}
