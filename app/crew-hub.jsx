@@ -190,6 +190,34 @@ function googleCalUrl(ev) {
   return "https://calendar.google.com/calendar/render?" + p.toString();
 }
 
+// ---------- retour navigateur ----------
+/**
+ * Empile une entrée d'historique tant qu'une vue superposée est ouverte —
+ * fiche d'event, formulaire de création — et la referme quand le navigateur
+ * revient en arrière.
+ *
+ * Sans ça l'app ne navigue nulle part aux yeux du navigateur : ouvrir un
+ * event ne change qu'un état React. Le geste de bord sur iOS et le bouton
+ * retour sur Android quittaient donc l'app au lieu de revenir à la liste.
+ *
+ * `close` doit être stable (useCallback) : une fonction recréée à chaque
+ * rendu relancerait l'effet, et empilerait une entrée par rendu.
+ */
+function useCloseOnBack(open, close) {
+  useEffect(() => {
+    if (!open) return;
+    window.history.pushState({ hubOverlay: true }, "");
+    const onPop = () => close();
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      // Fermeture par un bouton de l'app : l'entrée empilée n'a plus d'objet.
+      // La retirer évite de laisser derrière soi un retour qui ne fait rien.
+      if (window.history.state?.hubOverlay) window.history.back();
+    };
+  }, [open, close]);
+}
+
 // ---------- app ----------
 /**
  * `me` vient du compte connecté (voir app/page.tsx). Quand il est fourni,
@@ -212,6 +240,12 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
   const [newCities, setNewCities] = useState(new Set());
 
   const [loadError, setLoadError] = useState("");
+
+  // Le retour du navigateur referme ce qui est ouvert, plutôt que de quitter.
+  const closeEvent = useCallback(() => setSelected(null), []);
+  const closeModal = useCallback(() => setModal(null), []);
+  useCloseOnBack(Boolean(selected), closeEvent);
+  useCloseOnBack(Boolean(modal), closeModal);
 
   const reload = useCallback(async () => {
     try {
@@ -456,7 +490,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
           {/* Le header reste en place partout : liste comme fiche d'event. */}
           <Header meName={meName} onSignOut={onSignOut} notifyCity={notifyCity} onSetCity={onSetCity} onHome={goHome} onInvite={onInvite} />
           {selectedEvent ? (
-            <EventDetail ev={selectedEvent} me={me} actions={actions} availability={availability} onBack={() => setSelected(null)} />
+            <EventDetail ev={selectedEvent} me={me} actions={actions} availability={availability} onBack={closeEvent} />
           ) : (
             <>
           {loadError && (
@@ -500,7 +534,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
           )}
         </>
       )}
-      {modal === "event" && <EventForm defScale={scale} defCity={city !== "all" ? city : ""} onClose={() => setModal(null)} onSave={addEvent} />}
+      {modal === "event" && <EventForm defScale={scale} defCity={city !== "all" ? city : ""} onClose={closeModal} onSave={addEvent} />}
     </div>
   );
 }
