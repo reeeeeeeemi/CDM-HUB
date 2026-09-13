@@ -10,7 +10,7 @@ const EMPTY: AuthState = {};
 
 type Mode = "in" | "up" | "forgot";
 
-export function LoginForm() {
+export function LoginForm({ next = "" }: { next?: string }) {
   const [mode, setMode] = useState<Mode>("in");
 
   // Safari restaure les pages depuis sa mémoire quand on appuie sur Retour,
@@ -86,6 +86,7 @@ export function LoginForm() {
 
       {/* key={mode} : chaque mode repart avec un formulaire vierge. */}
       <form className="auth-form" action={action} key={mode}>
+        {next && <input type="hidden" name="next" value={next} />}
         {isSignUp && (
           <div className="auth-field">
             <label htmlFor="pseudo">Ton blaze</label>

@@ -10,6 +10,16 @@ import { createClient } from "@/lib/supabase/server";
 
 export type AuthState = { error?: string; notice?: string };
 
+/**
+ * Où renvoyer après connexion. Seuls les chemins internes sont acceptés :
+ * un "next" venu de l'extérieur ne doit pas pouvoir expédier l'utilisateur
+ * ailleurs après qu'il a saisi son mot de passe.
+ */
+function safeNext(value: FormDataEntryValue | null) {
+  const next = String(value ?? "");
+  return next.startsWith("/") && !next.startsWith("//") ? next : "/";
+}
+
 /** Traduit les messages de Supabase, qui sont en anglais et parfois obscurs. */
 function readable(message: string) {
   if (message.includes("Invalid login credentials")) {
@@ -43,7 +53,7 @@ export async function signIn(_prev: AuthState, formData: FormData): Promise<Auth
 
   if (error) return { error: readable(error.message) };
 
-  redirect("/", RedirectType.replace);
+  redirect(safeNext(formData.get("next")), RedirectType.replace);
 }
 
 export async function signUp(_prev: AuthState, formData: FormData): Promise<AuthState> {
@@ -80,7 +90,7 @@ export async function signUp(_prev: AuthState, formData: FormData): Promise<Auth
     return { notice: `Compte créé. Ouvre le lien envoyé à ${email} pour le confirmer.` };
   }
 
-  redirect("/", RedirectType.replace);
+  redirect(safeNext(formData.get("next")), RedirectType.replace);
 }
 
 export async function requestReset(_prev: AuthState, formData: FormData): Promise<AuthState> {

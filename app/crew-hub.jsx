@@ -196,9 +196,10 @@ function googleCalUrl(ev) {
  * l'écran Onboarding ne s'affiche plus : l'identité est déjà connue.
  *
  * @param {{ me?: string | null, meName?: string, onSignOut?: (() => void | Promise<void>) | null,
- *          notifyCity?: string, onSetCity?: ((city: string) => void) | null }} props
+ *          notifyCity?: string, onSetCity?: ((city: string) => void) | null,
+ *          onInvite?: (() => Promise<{ url?: string, error?: string }>) | null }} props
  */
-export default function App({ me: meFromAuth = null, meName = "", onSignOut = null, notifyCity = "", onSetCity = null }) {
+export default function App({ me: meFromAuth = null, meName = "", onSignOut = null, notifyCity = "", onSetCity = null, onInvite = null }) {
   const [me, setMe] = useState(meFromAuth);
   const [tab, setTab] = useState("events");
   const [scale, setScale] = useState("big");
@@ -453,7 +454,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
       ) : (
         <>
           {/* Le header reste en place partout : liste comme fiche d'event. */}
-          <Header meName={meName} onSignOut={onSignOut} notifyCity={notifyCity} onSetCity={onSetCity} onHome={goHome} />
+          <Header meName={meName} onSignOut={onSignOut} notifyCity={notifyCity} onSetCity={onSetCity} onHome={goHome} onInvite={onInvite} />
           {selectedEvent ? (
             <EventDetail ev={selectedEvent} me={me} actions={actions} availability={availability} onBack={() => setSelected(null)} />
           ) : (
@@ -506,8 +507,31 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
 
 
 // ---------- header + tabs ----------
-function Header({ meName, onSignOut, notifyCity, onSetCity, onHome }) {
+function Header({ meName, onSignOut, notifyCity, onSetCity, onHome, onInvite }) {
   const [open, setOpen] = useState(false);
+  const [invite, setInvite] = useState("");
+  const [making, setMaking] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [invErr, setInvErr] = useState("");
+
+  const makeInvite = async () => {
+    setMaking(true); setInvErr("");
+    const r = await onInvite();
+    setMaking(false);
+    if (r?.url) setInvite(r.url);
+    else setInvErr(r?.error || "Impossible de créer le lien.");
+  };
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(invite);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Le presse-papier est refusé hors HTTPS : on montre le lien à copier.
+      setInvErr(invite);
+    }
+  };
   const [stuck, setStuck] = useState(false);
 
   // Le filet sous le header n'apparaît qu'une fois du contenu passé dessous.
@@ -544,6 +568,25 @@ function Header({ meName, onSignOut, notifyCity, onSetCity, onHome }) {
                     onClick={() => pick(c)}>{CITIES[c]} {c}</button>
                 ))}
               </div>
+
+              {onInvite && (
+                <div className="hd-menu-inv">
+                  <div className="hd-menu-sec">Inviter un ami</div>
+                  {invite ? (
+                    <>
+                      <p className="hd-menu-hint">Valable 7 jours. Qui l&apos;ouvre rejoint le hub.</p>
+                      <button type="button" className="inv-link" onClick={copy}>
+                        {copied ? <><Check size={14} /> Lien copié</> : <><Link2 size={14} /> Copier le lien</>}
+                      </button>
+                    </>
+                  ) : (
+                    <button type="button" className="inv-make" onClick={makeInvite} disabled={making}>
+                      {making ? "Un instant…" : "Créer un lien d'invitation"}
+                    </button>
+                  )}
+                  {invErr && <p className="hd-menu-err">{invErr}</p>}
+                </div>
+              )}
 
               {onSignOut && (
                 <form action={onSignOut} className="hd-menu-out">
@@ -1350,6 +1393,13 @@ a{text-decoration:none;color:inherit;}
 .hd-menu-sec{font-weight:700;font-size:13.5px;margin-bottom:3px;}
 .hd-menu-hint{color:var(--muted);font-size:12.5px;line-height:1.45;margin:0 0 10px;}
 .hd-menu-cities{display:flex;flex-wrap:wrap;gap:6px;}
+.hd-menu-inv{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);}
+.inv-make,.inv-link{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;
+  padding:11px;border-radius:12px;background:var(--accent);color:#fff;font-family:inherit;
+  font-weight:600;font-size:14px;margin-top:8px;}
+.inv-make:disabled{opacity:.55;}
+.inv-link{background:var(--accent-soft);color:var(--accent);}
+.hd-menu-err{margin:8px 0 0;font-size:12px;line-height:1.45;color:#B91C1C;word-break:break-all;}
 .hd-menu-out{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);}
 .hd-menu-out button{width:100%;padding:11px;border-radius:12px;background:var(--bg);
   font-family:inherit;font-weight:600;font-size:14px;color:var(--muted);}

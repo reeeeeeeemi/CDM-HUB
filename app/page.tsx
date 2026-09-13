@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
 import CrewHub from "./crew-hub";
+import { createInvite } from "@/lib/actions/invite";
 import { setNotifyCity } from "@/lib/actions/profile";
 
 import { signOut } from "./login/actions";
@@ -69,6 +70,7 @@ export default async function Page() {
       onSignOut={signOut}
       notifyCity={profile?.city ?? ""}
       onSetCity={setNotifyCity}
+      onInvite={createInvite}
     />
   );
 }

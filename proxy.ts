@@ -45,11 +45,18 @@ export async function proxy(request: NextRequest) {
   // Optimistic check only — it saves rendering a page the visitor cannot see.
   // The real authorisation lives in app/page.tsx and in the RLS policies.
   const { pathname } = request.nextUrl;
-  const isPublic = pathname.startsWith("/login") || pathname.startsWith("/auth");
+  // /invite doit être atteint sans compte : la page y construit elle-même le
+  // retour vers le jeton une fois l'inscription faite.
+  const isPublic =
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/auth") ||
+    pathname.startsWith("/invite");
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
+    // Garde la destination, pour y revenir une fois connecté.
+    url.search = pathname === "/" ? "" : `?next=${encodeURIComponent(pathname)}`;
     return NextResponse.redirect(url);
   }
 

@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 
 import { LoginForm } from "./form";
 
-export default async function LoginPage() {
+export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const supabase = await createClient();
 
   // Sans ça, le bouton retour du navigateur ramène un utilisateur déjà
@@ -17,5 +17,6 @@ export default async function LoginPage() {
     redirect("/");
   }
 
-  return <LoginForm />;
+  const { next } = await searchParams;
+  return <LoginForm next={typeof next === "string" ? next : ""} />;
 }
