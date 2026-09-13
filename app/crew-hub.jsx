@@ -75,7 +75,20 @@ const MODULE_META = {
 
 // Les identifiants sont générés ici pour que l'affichage optimiste et la
 // ligne écrite en base portent le même id.
-const uid = () => crypto.randomUUID();
+//
+// crypto.randomUUID n'existe qu'en contexte sécurisé : en HTTPS ou sur
+// localhost, mais pas sur http://192.168.x.x, d'où un repli. getRandomValues,
+// lui, reste disponible partout.
+const uid = () => {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+  const b = new Uint8Array(16);
+  if (typeof crypto !== "undefined" && crypto.getRandomValues) crypto.getRandomValues(b);
+  else for (let i = 0; i < 16; i++) b[i] = Math.floor(Math.random() * 256);
+  b[6] = (b[6] & 0x0f) | 0x40; // version 4
+  b[8] = (b[8] & 0x3f) | 0x80; // variante RFC 4122
+  const h = [...b].map((x) => x.toString(16).padStart(2, "0"));
+  return `${h.slice(0, 4).join("")}-${h.slice(4, 6).join("")}-${h.slice(6, 8).join("")}-${h.slice(8, 10).join("")}-${h.slice(10, 16).join("")}`;
+};
 const normUrl = (u) => (!u ? "" : /^https?:\/\//i.test(u) ? u : "https://" + u);
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
