@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   Plus, Users, CalendarDays, MapPin, ChevronLeft, ChevronDown, Check, HelpCircle,
   X, Trash2, Sparkles, Send, Wallet, MessageCircle, Link2,
@@ -277,6 +277,30 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
       setLoading(false);
     })();
   }, [meFromAuth, reload]);
+
+  // Les données ne sont chargées qu'au montage. Or sur l'écran d'accueil, iOS
+  // ré-affiche l'app telle qu'elle était sans recharger la page : sans ça on
+  // peut consulter l'état de la base d'il y a plusieurs heures sans le savoir.
+  // Date.now() resterait un appel impur pendant le rendu : on l'amorce
+  // depuis l'effet, qui ne tourne qu'une fois.
+  const lastLoad = useRef(0);
+  useEffect(() => {
+    lastLoad.current = Date.now();
+    const wake = () => {
+      if (document.visibilityState !== "visible") return;
+      // Marge de 30 s : passer deux secondes sur une autre app ne justifie
+      // pas de tout redemander à la base.
+      if (Date.now() - lastLoad.current < 30_000) return;
+      lastLoad.current = Date.now();
+      reload();
+    };
+    document.addEventListener("visibilitychange", wake);
+    window.addEventListener("focus", wake);
+    return () => {
+      document.removeEventListener("visibilitychange", wake);
+      window.removeEventListener("focus", wake);
+    };
+  }, [reload]);
 
   // Les 5 villes habituelles, plus toute ville libre qui a au moins un event —
   // sinon un event à Lisbonne ne serait atteignable que par « Toutes ».
