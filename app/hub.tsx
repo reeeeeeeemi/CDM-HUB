@@ -1,8 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 
 import CrewHub from "./crew-hub";
-import { createInvite } from "@/lib/actions/invite";
-import { setNotifyCity, setNotifyPrefs } from "@/lib/actions/profile";
 import { GROUP } from "@/lib/brand";
 import { signOut } from "./login/actions";
 
@@ -75,10 +73,6 @@ export function Hub({ viewer, initialEvent }: { viewer: Viewer; initialEvent?: s
       meName={viewer.pseudo}
       onSignOut={signOut}
       notifyCity={viewer.city}
-      onSetCity={setNotifyCity}
-      notifyPrefs={viewer.prefs}
-      onSetPrefs={setNotifyPrefs}
-      onInvite={createInvite}
       initialEvent={initialEvent}
     />
   );

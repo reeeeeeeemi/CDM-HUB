@@ -56,7 +56,11 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith("/login") ||
     pathname.startsWith("/auth") ||
     pathname.startsWith("/invite") ||
-    pathname.startsWith("/event");
+    pathname.startsWith("/event") ||
+    // La tâche planifiée appelle /api/digest sans session : redirigée vers
+    // /login, elle ne notifierait jamais personne. La route se garde
+    // elle-même, par le secret de Vercel et celui de la fonction SQL.
+    pathname.startsWith("/api");
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();

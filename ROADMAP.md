@@ -1,5 +1,8 @@
 # Ce qui vient ensuite
 
+**Tout est fait.** Les batchs A à E sont en place ; ce fichier reste pour les
+décisions qu'ils ont tranchées, et pour les deux réserves ci-dessous.
+
 Décisions arrêtées avec Rémi. Les batchs sont ordonnés par dépendance, pas
 par priorité — D et E peuvent passer à tout moment.
 
@@ -64,8 +67,10 @@ Le menu rapide se réduit à : ton nom, **Réglages**, **Se déconnecter**.
 La ville quitte le menu rapide : avec plusieurs villes ça devient une liste
 à cocher, trop lourde pour un menu, et on n'y touche qu'une fois par an.
 
-> **En suspens** : Rémi a choisi de *retirer* le lien d'invitation. Sans lui,
-> chaque nouvel ami repasse par du SQL. À reconfirmer avant de le supprimer.
+> **En suspens** : Rémi a choisi de *retirer* le lien d'invitation, sans
+> reconfirmer après que la conséquence lui a été signalée — chaque nouvel ami
+> repasserait par du SQL. Il est donc **conservé**, dans les Réglages, à côté
+> de la liste des membres. Le retirer reste une suppression de quelques lignes.
 
 ---
 

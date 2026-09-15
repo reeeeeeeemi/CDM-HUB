@@ -6,7 +6,7 @@ import {
   X, Trash2, Sparkles, Send, Wallet, MessageCircle, Link2,
   ExternalLink, MessageSquare, ListTodo, CheckCircle2, Circle, CalendarClock, Lock,
   Car, Plane, TrainFront, UserPlus, Navigation, CalendarX, AlertTriangle, CalendarPlus,
-  House, Map as MapIcon, MapPinned, ShoppingCart, BedDouble, Share2,
+  House, Map as MapIcon, MapPinned, ShoppingCart, BedDouble, Share2, Settings2,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ *
@@ -22,9 +22,7 @@ import {
 import * as db from "@/lib/hub-data";
 import { nameOf } from "@/lib/hub-data";
 import { APP_NAME, CITIES } from "@/lib/brand";
-import {
-  savePushSubscription, removePushSubscription, notifyNewEvent, notifyEventActivity,
-} from "@/lib/actions/push";
+import { notifyNewEvent, notifyEventActivity, notifyAttendees } from "@/lib/actions/push";
 
 // ---------- config ----------
 const CATS = {
@@ -272,99 +270,15 @@ function PlaceInput({ value, onChange, places, placeholder, onEnter }) {
   );
 }
 
-// ---------- notifications ----------
-// Les trois règles, telles qu'elles apparaissent dans le menu. Les clés
-// correspondent aux colonnes notify_* de profiles.
-const PREFS = [
-  ["big",  "Les big events"],
-  ["city", "Les plans dans ma ville"],
-  ["mine", "Les réactions sur mes events"],
-];
-
-const VAPID = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-
-/** La clé VAPID voyage en base64url ; PushManager attend des octets bruts. */
-const vapidBytes = (key) => {
-  const pad = "=".repeat((4 - (key.length % 4)) % 4);
-  const raw = atob((key + pad).replace(/-/g, "+").replace(/_/g, "/"));
-  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
-};
-
-/**
- * État de l'abonnement aux notifications de cet appareil.
- *
- * « unsupported » n'est pas un échec : sur iPhone, Notification et PushManager
- * n'existent que dans l'app ajoutée à l'écran d'accueil. Dans Safari, il n'y a
- * rien à proposer, et le dire vaut mieux qu'un bouton qui ne ferait rien.
- */
-function usePush() {
-  const [state, setState] = useState("checking"); // checking|unsupported|off|on|denied
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-
-  useEffect(() => {
-    (async () => {
-      if (!VAPID || !("serviceWorker" in navigator) || !("PushManager" in window)
-          || !("Notification" in window)) return setState("unsupported");
-      if (Notification.permission === "denied") return setState("denied");
-      try {
-        const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" });
-        setState((await reg.pushManager.getSubscription()) ? "on" : "off");
-      } catch {
-        setState("unsupported");
-      }
-    })();
-  }, []);
-
-  const enable = async () => {
-    setBusy(true); setErr("");
-    try {
-      // iOS exige que la demande vienne d'un geste : d'où le bouton.
-      const perm = await Notification.requestPermission();
-      if (perm !== "granted") { setState(perm === "denied" ? "denied" : "off"); return; }
-      const reg = await navigator.serviceWorker.ready;
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: vapidBytes(VAPID),
-      });
-      const r = await savePushSubscription(JSON.parse(JSON.stringify(sub)));
-      // Si la base refuse, défaire l'abonnement : le garder côté navigateur
-      // promettrait des notifications que personne ne saurait envoyer.
-      if (r?.error) { await sub.unsubscribe(); setErr(r.error); return; }
-      setState("on");
-    } catch (e) {
-      setErr(e?.message || "Impossible d'activer les notifications.");
-    } finally { setBusy(false); }
-  };
-
-  const disable = async () => {
-    setBusy(true); setErr("");
-    try {
-      const reg = await navigator.serviceWorker.ready;
-      const sub = await reg.pushManager.getSubscription();
-      if (sub) { await removePushSubscription(sub.endpoint); await sub.unsubscribe(); }
-      setState("off");
-    } catch (e) {
-      setErr(e?.message || "Impossible de couper les notifications.");
-    } finally { setBusy(false); }
-  };
-
-  return { state, busy, err, enable, disable };
-}
-
 // ---------- app ----------
 /**
  * `me` vient du compte connecté (voir app/page.tsx). Quand il est fourni,
  * l'écran Onboarding ne s'affiche plus : l'identité est déjà connue.
  *
  * @param {{ me?: string | null, meName?: string, onSignOut?: (() => void | Promise<void>) | null,
- *          notifyCity?: string, onSetCity?: ((city: string) => void) | null,
- *          onInvite?: (() => Promise<{ url?: string, error?: string }>) | null,
- *          notifyPrefs?: { big: boolean, city: boolean, mine: boolean } | null,
- *          onSetPrefs?: ((prefs: Record<string, boolean>) => void) | null,
- *          initialEvent?: string | null }} props
+ *          notifyCity?: string, initialEvent?: string | null }} props
  */
-export default function App({ me: meFromAuth = null, meName = "", onSignOut = null, notifyCity = "", onSetCity = null, onInvite = null, notifyPrefs = null, onSetPrefs = null, initialEvent = null }) {
+export default function App({ me: meFromAuth = null, meName = "", onSignOut = null, notifyCity = "", initialEvent = null }) {
   const [me, setMe] = useState(meFromAuth);
   const [tab, setTab] = useState("events");
   const [scale, setScale] = useState("big");
@@ -506,12 +420,15 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
     // ceux qui vivent dans la ville. La base tranche, on ne fait qu'annoncer.
     // Volontairement sans await : une notification qui échoue ne doit pas
     // remonter comme un échec de création.
-    notifyNewEvent(row.id, row.title, row.scale, row.city || "").catch(() => {});
+    notifyNewEvent(row.id, row.title, row.scale, row.city || "", fmtRange(row.date, row.endDate)).catch(() => {});
   };
 
-  const delEvent = useCallback(async (id) => {
+  const delEvent = useCallback(async (id, title = "") => {
     setEvents((prev) => prev.filter((e) => e.id !== id));
     closeEvent();
+    // Avant la suppression : les réponses sont effacées en cascade avec
+    // l'event, et il ne resterait donc personne à prévenir.
+    await notifyAttendees(id, title || "Plan annulé", "L'event a été annulé.").catch(() => {});
     await persist(() => db.deleteEvent(id));
   }, [persist, closeEvent]);
 
@@ -601,15 +518,22 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
       }) }));
       persist(() => db.voteDate(oid, me, on));
     },
+    // Figer un sondage est le seul moment où une date ou un lieu changent :
+    // il n'existe pas d'écran d'édition. « Le sondage se clôt » et « la date
+    // change » sont donc le même instant, qu'une seule notification couvre.
     lockDate: (id, oid) => {
-      let patch;
+      let patch, title = "";
       updateEvent(id, (e) => {
+        title = e.title;
         const o = (e.datePoll || []).find((x) => x.id === oid);
         if (!o) return e;
         patch = { starts_on: o.date, ends_on: o.endDate || null };
         return { ...e, date: o.date, endDate: o.endDate || "" };
       });
-      if (patch) persist(() => db.patchEvent(id, patch));
+      if (patch) {
+        persist(() => db.patchEvent(id, patch));
+        notifyAttendees(id, title, `Date fixée : ${fmtRange(patch.starts_on, patch.ends_on)}`).catch(() => {});
+      }
     },
 
     setTransport: (id, entry) => {
@@ -643,14 +567,18 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
       persist(() => db.delPlaceOption(oid));
     },
     lockPlace: (id, oid) => {
-      let patch;
+      let patch, title = "";
       updateEvent(id, (e) => {
+        title = e.title;
         const o = (e.placePoll || []).find((x) => x.id === oid);
         if (!o) return e;
         patch = { place: o.label, place_url: o.url || null };
         return { ...e, place: o.label, placeUrl: o.url || "" };
       });
-      if (patch) persist(() => db.patchEvent(id, patch));
+      if (patch) {
+        persist(() => db.patchEvent(id, patch));
+        notifyAttendees(id, title, `Lieu fixé : ${patch.place}`).catch(() => {});
+      }
     },
 
     setHosting: (id, entry) => {
@@ -715,7 +643,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
       ) : (
         <>
           {/* Le header reste en place partout : liste comme fiche d'event. */}
-          <Header meName={meName} onSignOut={onSignOut} notifyCity={notifyCity} onSetCity={onSetCity} onHome={goHome} onInvite={onInvite} notifyPrefs={notifyPrefs} onSetPrefs={onSetPrefs} />
+          <Header meName={meName} onSignOut={onSignOut} onHome={goHome} />
           {selectedEvent ? (
             <EventDetail ev={selectedEvent} me={me} actions={actions} availability={availability} onBack={closeEvent} places={places} />
           ) : (
@@ -768,40 +696,8 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
 
 
 // ---------- header + tabs ----------
-function Header({ meName, onSignOut, notifyCity, onSetCity, onHome, onInvite, notifyPrefs, onSetPrefs }) {
+function Header({ meName, onSignOut, onHome }) {
   const [open, setOpen] = useState(false);
-  const push = usePush();
-  // Optimiste, comme la ville : la case bascule tout de suite, l'écriture suit.
-  const [prefs, setPrefs] = useState(notifyPrefs || { big: true, city: true, mine: true });
-  const flipPref = (k) => {
-    const next = { ...prefs, [k]: !prefs[k] };
-    setPrefs(next);
-    // Un seul interrupteur part : deux onglets ouverts ne s'écrasent pas.
-    onSetPrefs?.({ [k]: next[k] });
-  };
-  const [invite, setInvite] = useState("");
-  const [making, setMaking] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [invErr, setInvErr] = useState("");
-
-  const makeInvite = async () => {
-    setMaking(true); setInvErr("");
-    const r = await onInvite();
-    setMaking(false);
-    if (r?.url) setInvite(r.url);
-    else setInvErr(r?.error || "Impossible de créer le lien.");
-  };
-
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(invite);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Le presse-papier est refusé hors HTTPS : on montre le lien à copier.
-      setInvErr(invite);
-    }
-  };
   const [stuck, setStuck] = useState(false);
 
   // Le filet sous le header n'apparaît qu'une fois du contenu passé dessous.
@@ -811,9 +707,7 @@ function Header({ meName, onSignOut, notifyCity, onSetCity, onHome, onInvite, no
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
-  // Optimiste : la puce se coche tout de suite, l'enregistrement suit.
-  const [city, setCity] = useState(notifyCity || "");
-  const pick = (c) => { const next = city === c ? "" : c; setCity(next); onSetCity?.(next); };
+
   return (
     <header className={"hd" + (stuck ? " stuck" : "")}>
       <h1 className="hd-title-wrap">
@@ -827,83 +721,14 @@ function Header({ meName, onSignOut, notifyCity, onSetCity, onHome, onInvite, no
         {open && (
           <>
             <div className="hd-backdrop" onClick={() => setOpen(false)} />
+            {/* Deux entrées, pas plus : ce menu sert à sortir vite, pas à
+                régler quoi que ce soit. Villes, notifications, compte et
+                invitations vivent maintenant sur /reglages. */}
             <div className="hd-menu" role="menu">
               <div className="hd-menu-me">{meName}</div>
-
-              <div className="hd-menu-sec">Me prévenir des events à</div>
-              <p className="hd-menu-hint">Tu seras signalé quand un plan est publié dans cette ville.</p>
-              <div className="hd-menu-cities">
-                {CITY_LIST.map((c) => (
-                  <button key={c} type="button" className={"catchip city" + (city === c ? " on" : "")}
-                    onClick={() => pick(c)}>{CITIES[c]} {c}</button>
-                ))}
-              </div>
-
-              <div className="hd-menu-inv">
-                <div className="hd-menu-sec">Notifications</div>
-                {push.state === "unsupported" ? (
-                  <p className="hd-menu-hint">
-                    Ajoute d&apos;abord l&apos;app à ton écran d&apos;accueil : sur iPhone,
-                    les notifications n&apos;existent que là.
-                  </p>
-                ) : push.state === "denied" ? (
-                  <p className="hd-menu-hint">
-                    Tu les as refusées. Ça se rouvre dans les réglages de ton téléphone,
-                    à la ligne de cette app.
-                  </p>
-                ) : (
-                  <>
-                    {push.state !== "on" && (
-                      <p className="hd-menu-hint">
-                        Les big events, les plans de ta ville, et les réactions sur les tiens.
-                      </p>
-                    )}
-                    <button type="button" className="inv-make" disabled={push.busy || push.state === "checking"}
-                      onClick={push.state === "on" ? push.disable : push.enable}>
-                      {push.busy ? "Un instant…"
-                        : push.state === "on" ? "Couper les notifications"
-                        : "Activer les notifications"}
-                    </button>
-                    {push.state === "on" && onSetPrefs && (
-                      <div className="hd-menu-prefs">
-                        {PREFS.map(([k, label]) => (
-                          <button key={k} type="button" role="switch" aria-checked={prefs[k]}
-                            className={"pref" + (prefs[k] ? " on" : "")} onClick={() => flipPref(k)}>
-                            <span className="pref-box">{prefs[k] && <Check size={12} strokeWidth={3} />}</span>
-                            {label}
-                          </button>
-                        ))}
-                        {prefs.city && !city && (
-                          <p className="hd-menu-hint pref-warn">
-                            Choisis ta ville juste au-dessus, sinon celle-ci ne t&apos;enverra rien.
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </>
-                )}
-                {push.err && <p className="hd-menu-err">{push.err}</p>}
-              </div>
-
-              {onInvite && (
-                <div className="hd-menu-inv">
-                  <div className="hd-menu-sec">Inviter un ami</div>
-                  {invite ? (
-                    <>
-                      <p className="hd-menu-hint">Valable 7 jours. Qui l&apos;ouvre rejoint le hub.</p>
-                      <button type="button" className="inv-link" onClick={copy}>
-                        {copied ? <><Check size={14} /> Lien copié</> : <><Link2 size={14} /> Copier le lien</>}
-                      </button>
-                    </>
-                  ) : (
-                    <button type="button" className="inv-make" onClick={makeInvite} disabled={making}>
-                      {making ? "Un instant…" : "Créer un lien d'invitation"}
-                    </button>
-                  )}
-                  {invErr && <p className="hd-menu-err">{invErr}</p>}
-                </div>
-              )}
-
+              <a className="hd-menu-link" href="/reglages">
+                <Settings2 size={15} /> Réglages
+              </a>
               {onSignOut && (
                 <form action={onSignOut} className="hd-menu-out">
                   <button type="submit">Se déconnecter</button>
@@ -916,6 +741,7 @@ function Header({ meName, onSignOut, notifyCity, onSetCity, onHome, onInvite, no
     </header>
   );
 }
+
 function Tabs({ tab, setTab, newCount }) {
   return (
     <div className="tabs">
@@ -1126,7 +952,7 @@ function EventDetail({ ev, me, actions, availability, onBack, places }) {
             <p className="del-confirm-sub">Les réponses, commentaires et listes partiront avec. C&apos;est définitif.</p>
             <div className="del-confirm-acts">
               <button className="ghost-btn" onClick={() => setConfirmDel(false)}>Annuler</button>
-              <button className="del-btn danger" onClick={() => actions.del(ev.id)}><Trash2 size={15} /> Oui, supprimer</button>
+              <button className="del-btn danger" onClick={() => actions.del(ev.id, ev.title)}><Trash2 size={15} /> Oui, supprimer</button>
             </div>
           </div>
         ) : (
@@ -1780,22 +1606,7 @@ a{text-decoration:none;color:inherit;}
   background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;
   box-shadow:0 18px 40px -12px rgba(20,17,28,.28);animation:up .16s cubic-bezier(.2,.8,.2,1);}
 .hd-menu-me{font-family:'Bricolage Grotesque';font-weight:800;font-size:17px;margin-bottom:14px;}
-.hd-menu-sec{font-weight:700;font-size:13.5px;margin-bottom:3px;}
-.hd-menu-hint{color:var(--muted);font-size:12.5px;line-height:1.45;margin:0 0 10px;}
-.hd-menu-cities{display:flex;flex-wrap:wrap;gap:6px;}
-.hd-menu-inv{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);}
-.inv-make,.inv-link{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;
-  padding:11px;border-radius:12px;background:var(--accent);color:#fff;font-family:inherit;
-  font-weight:600;font-size:14px;margin-top:8px;}
-.inv-make:disabled{opacity:.55;}
-.inv-link{background:var(--accent-soft);color:var(--accent);}
-.hd-menu-prefs{display:flex;flex-direction:column;gap:2px;margin-top:10px;}
-.pref{display:flex;align-items:center;gap:9px;padding:7px 2px;font-size:13px;font-weight:600;color:var(--muted);text-align:left;background:none;border:0;}
-.pref.on{color:var(--ink);}
-.pref-box{flex-shrink:0;width:19px;height:19px;border-radius:6px;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;color:#fff;}
-.pref.on .pref-box{background:var(--accent);border-color:var(--accent);}
-.pref-warn{margin:6px 0 0;}
-.hd-menu-err{margin:8px 0 0;font-size:12px;line-height:1.45;color:#B91C1C;word-break:break-all;}
+.hd-menu-link{display:flex;align-items:center;gap:9px;padding:11px 2px;font-weight:600;font-size:14px;color:var(--ink);border-bottom:1px solid var(--line);}
 .hd-menu-out{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);}
 .hd-menu-out button{width:100%;padding:11px;border-radius:12px;background:var(--bg);
   font-family:inherit;font-weight:600;font-size:14px;color:var(--muted);}

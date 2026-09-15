@@ -1,39 +1,13 @@
 "use server";
 
-import webpush, { type PushSubscription as WebPushSubscription } from "web-push";
-
 import { createClient } from "@/lib/supabase/server";
+import { sendPush, type PushTarget } from "@/lib/push-send";
 
 /** Ce que le navigateur renvoie après un `pushManager.subscribe()`. */
 export type BrowserSubscription = {
   endpoint: string;
   keys: { p256dh: string; auth: string };
 };
-
-type Target = { endpoint: string; p256dh: string; auth: string };
-
-let configured = false;
-
-/**
- * Configure web-push à la première utilisation seulement.
- *
- * Renvoie false quand les clés manquent — sur une preview où les variables
- * n'ont pas été renseignées, par exemple. Mieux vaut ne rien notifier que
- * faire échouer la création de l'event.
- */
-function ready() {
-  if (configured) return true;
-  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-  const privateKey = process.env.VAPID_PRIVATE_KEY;
-  if (!publicKey || !privateKey) return false;
-  webpush.setVapidDetails(
-    process.env.VAPID_SUBJECT || "mailto:hub@cdm.local",
-    publicKey,
-    privateKey
-  );
-  configured = true;
-  return true;
-}
 
 /** Enregistre l'appareil courant. Un même compte peut en avoir plusieurs. */
 export async function savePushSubscription(sub: BrowserSubscription) {
@@ -68,57 +42,50 @@ export async function removePushSubscription(endpoint: string) {
   return error ? { error: error.message } : {};
 }
 
-type Payload = { title: string; body: string; url: string; tag: string };
-
-/**
- * Envoie à tout le monde en parallèle, et oublie les appareils que le service
- * de push déclare morts : 404 et 410 signifient que l'abonnement n'existe
- * plus — app désinstallée, navigateur réinitialisé. Sans ce ménage ils
- * resteraient en base à faire échouer chaque envoi.
- */
-async function deliver(targets: Target[], payload: Payload) {
-  if (targets.length === 0 || !ready()) return { sent: 0 };
-
-  const supabase = await createClient();
-  const body = JSON.stringify(payload);
-
-  const results = await Promise.allSettled(
-    targets.map(async (t) => {
-      const sub: WebPushSubscription = {
-        endpoint: t.endpoint,
-        keys: { p256dh: t.p256dh, auth: t.auth },
-      };
-      try {
-        await webpush.sendNotification(sub, body);
-        return true;
-      } catch (e) {
-        const status = (e as { statusCode?: number }).statusCode;
-        if (status === 404 || status === 410) {
-          await supabase.rpc("prune_push_subscription", { dead_endpoint: t.endpoint });
-        }
-        throw e;
-      }
-    })
-  );
-
-  return { sent: results.filter((r) => r.status === "fulfilled").length };
-}
-
 /**
  * Notifie la publication d'un event.
  *
  * Qui reçoit quoi est décidé en base (push_targets_for_event) : big event
  * pour tout le groupe, event du quotidien pour ceux qui vivent dans la ville.
  */
-export async function notifyNewEvent(eventId: string, title: string, scale: string, city: string) {
+export async function notifyNewEvent(
+  eventId: string,
+  title: string,
+  scale: string,
+  city: string,
+  when: string
+) {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("push_targets_for_event", { event_id: eventId });
   if (error || !data) return { sent: 0 };
 
-  const big = scale === "big";
-  return deliver(data as Target[], {
-    title: big ? "✨ Nouveau big event" : `Nouveau plan${city ? ` à ${city}` : ""}`,
-    body: title,
+  // Le titre de l'event en première ligne : c'est lui qu'on lit sur un écran
+  // verrouillé, pas la catégorie. Le contexte passe en dessous.
+  const kind = scale === "big" ? "✨ Nouveau big event" : "Nouveau plan";
+  const parts = [kind, city, when].filter(Boolean);
+  return sendPush(data as PushTarget[], {
+    title,
+    body: parts.join(" · "),
+    url: `/event/${eventId}`,
+    tag: `event:${eventId}`,
+  });
+}
+
+/**
+ * Notifie les gens chauds qu'un plan a bougé.
+ *
+ * Faute d'écran d'édition, une date ou un lieu ne changent qu'en figeant un
+ * sondage : « le sondage se clôt » et « la date change » sont le même
+ * instant, et cette fonction couvre les deux — plus l'annulation.
+ */
+export async function notifyAttendees(eventId: string, title: string, what: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("push_targets_for_attendees", { event_id: eventId });
+  if (error || !data) return { sent: 0 };
+
+  return sendPush(data as PushTarget[], {
+    title,
+    body: what,
     url: `/event/${eventId}`,
     tag: `event:${eventId}`,
   });
@@ -130,7 +97,7 @@ export async function notifyEventActivity(eventId: string, title: string, what: 
   const { data, error } = await supabase.rpc("push_targets_for_author", { event_id: eventId });
   if (error || !data) return { sent: 0 };
 
-  return deliver(data as Target[], {
+  return sendPush(data as PushTarget[], {
     title,
     body: what,
     url: `/event/${eventId}`,
