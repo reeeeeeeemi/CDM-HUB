@@ -1024,6 +1024,19 @@ function EventDetail({ ev, me, actions, availability, onBack, places }) {
             {shared ? <><Check size={16} /> Lien copié</> : <><Share2 size={16} /> Partager</>}
           </button>
         </div>
+        {ev.date && (
+          <div className="cal-block">
+            {/* Sous Partager : les deux gestes qu'on fait en découvrant un
+                plan — le transmettre, et le poser dans son agenda.
+                L'action d'abord, la destination ensuite : les boutons
+                nommaient un agenda sans jamais dire ce qu'ils faisaient. */}
+            <div className="cal-label"><CalendarPlus size={14} /> Ajouter à mon agenda</div>
+            <div className="cal-row">
+              <button className="cal-btn light" onClick={() => downloadICS(ev)}>Apple / iCal</button>
+              <a className="cal-btn light" href={googleCalUrl(ev)} target="_blank" rel="noopener noreferrer">Google Agenda</a>
+            </div>
+          </div>
+        )}
         <div className="detail-emoji">{cat.emoji}</div>
         <div className="detail-tags">
           <span className="tag light">{cat.label}</span>
@@ -1040,18 +1053,6 @@ function EventDetail({ ev, me, actions, availability, onBack, places }) {
       <div className="wrap">
         <div className="info-row"><CalendarDays size={18} /><div><b>{fmtRange(ev.date, ev.endDate)}</b>{timeLabel && <span className="soft"> · {timeLabel}</span>}</div></div>
         {ev.place && <div className="info-row"><MapPin size={18} /><div><b>{ev.place}</b></div></div>}
-
-        {ev.date && (
-          <div className="cal-block">
-            {/* L'action d'abord, la destination ensuite : les deux boutons
-                nommaient un agenda sans jamais dire ce qu'ils faisaient. */}
-            <div className="cal-label"><CalendarPlus size={15} /> Ajouter à mon agenda</div>
-            <div className="cal-row">
-              <button className="cal-btn" onClick={() => downloadICS(ev)}>Apple / iCal</button>
-              <a className="cal-btn" href={googleCalUrl(ev)} target="_blank" rel="noopener noreferrer">Google Agenda</a>
-            </div>
-          </div>
-        )}
 
         {ev.description && <div className="detail-desc">{ev.description}</div>}
 
@@ -1733,7 +1734,10 @@ const CSS = `
 h1,h2,h3{font-family:'Bricolage Grotesque',sans-serif;margin:0;letter-spacing:-.02em;}
 button{font-family:inherit;cursor:pointer;border:none;background:none;}
 a{text-decoration:none;color:inherit;}
-.wrap{padding:14px 18px calc(120px + env(safe-area-inset-bottom));}
+/* Des marges plus franches : les cartes touchaient les bords de l'écran,
+   et rien ne les détachait du fond. La largeur maximale ne sert que sur
+   grand écran, où une carte étirée sur 1200px est illisible. */
+.wrap{padding:14px 26px calc(120px + env(safe-area-inset-bottom));max-width:620px;margin:0 auto;}
 .center{display:flex;justify-content:center;align-items:center;min-height:100vh;min-height:100dvh;}
 .spinner{width:34px;height:34px;border:3px solid var(--accent-soft);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
@@ -1786,7 +1790,7 @@ a{text-decoration:none;color:inherit;}
   font-family:inherit;font-weight:600;font-size:14px;color:var(--muted);}
 .hd-menu-out button:hover{background:#EDEAE3;color:var(--ink);}
 
-.tabs{display:flex;gap:6px;padding:0 18px 4px;}
+.tabs{display:flex;gap:6px;padding:0 26px 4px;max-width:620px;margin:0 auto;}
 .load-err{display:flex;align-items:center;gap:9px;margin:0 18px 10px;padding:11px 13px;border-radius:12px;
   background:#FDECEC;color:#B91C1C;font-size:13px;font-weight:600;line-height:1.4;}
 .load-err span{flex:1;min-width:0;}
@@ -1842,7 +1846,7 @@ a{text-decoration:none;color:inherit;}
 /* La fiche vit désormais sous le header : elle ne doit plus réclamer
    toute la hauteur de l'écran, sinon la page dépasse d'autant. */
 .detail{min-height:auto;}
-.detail-hero{padding:16px 18px 30px;color:#fff;border-radius:0 0 26px 26px;}
+.detail-hero{padding:16px 26px 30px;color:#fff;border-radius:0 0 26px 26px;}
 .detail-emoji{font-size:44px;margin:16px 0 10px;}
 .detail-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
 .ghost-btn{display:inline-flex;align-items:center;gap:4px;font-weight:600;font-size:14px;padding:7px 12px 7px 8px;border-radius:10px;color:var(--muted);}
@@ -1857,10 +1861,13 @@ a{text-decoration:none;color:inherit;}
 .detail-desc{margin:18px 0;padding:14px 16px;border-left:3px solid var(--accent);background:var(--card);border-radius:0 14px 14px 0;line-height:1.6;color:var(--ink);font-size:16.5px;white-space:pre-wrap;}
 
 .detail-top{display:flex;align-items:center;justify-content:space-between;gap:10px;}
-.cal-block{margin-top:14px;}
-.cal-label{display:flex;align-items:center;gap:7px;font-weight:700;font-size:13px;margin-bottom:8px;}
-.cal-row{display:flex;gap:9px;}
-.cal-btn{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:11px;border-radius:12px;border:1.5px solid var(--line);background:var(--card);font-weight:600;font-size:13.5px;color:var(--ink);transition:.12s;}
+/* Dans le bandeau coloré : aligné à droite, sous le bouton Partager. */
+.cal-block{margin-top:12px;display:flex;flex-direction:column;align-items:flex-end;gap:7px;}
+.cal-btn.light{border-color:rgba(255,255,255,.4);background:rgba(255,255,255,.14);color:#fff;flex:0 0 auto;}
+.cal-btn.light:hover{background:rgba(255,255,255,.26);border-color:rgba(255,255,255,.7);color:#fff;}
+.cal-label{display:flex;align-items:center;gap:6px;font-weight:700;font-size:12px;opacity:.9;}
+.cal-row{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;}
+.cal-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:8px 12px;border-radius:11px;border:1.5px solid var(--line);background:var(--card);font-weight:600;font-size:12.5px;color:var(--ink);transition:.12s;}
 .cal-btn:hover{border-color:var(--accent);color:var(--accent);}
 .cal-hint{display:flex;align-items:center;gap:7px;background:var(--accent-soft);color:var(--accent);font-size:12.5px;font-weight:600;padding:9px 12px;border-radius:12px;margin-bottom:16px;}
 
