@@ -144,9 +144,9 @@ function timeAgo(ms) {
 // short : sur la carte, où la place manque et où la couleur suffit à dire
 // qu'il s'agit de ta propre réponse.
 const RS = {
-  in:    { label: "Je viens",  short: "présent",   color: "#0D9488", icon: Check },
-  maybe: { label: "Peut-être", short: "peut-être", color: "#D97706", icon: HelpCircle },
-  out:   { label: "Pas dispo", short: "absent",    color: "#94A3B8", icon: X },
+  in:    { label: "Je viens",  short: "Présent",   color: "#0D9488", icon: Check },
+  maybe: { label: "Peut-être", short: "Peut-être", color: "#D97706", icon: HelpCircle },
+  out:   { label: "Pas dispo", short: "Absent",    color: "#94A3B8", icon: X },
 };
 const LINK_KINDS = {
   tricount:  { label: "Tricount",  icon: Wallet,        color: "#1BA0A6" },
