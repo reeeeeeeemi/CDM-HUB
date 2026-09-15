@@ -12,6 +12,12 @@ export default function manifest(): MetadataRoute.Manifest {
     description:
       "Le QG des plans de la bande : ce qui arrive, ce qu'on propose, qui est chaud.",
     start_url: "/",
+    // scope : sans lui, iOS ne reconnaît pas /event/... comme appartenant à
+    // l'app installée. Toucher une notification ouvrait alors Safari — qui a
+    // son propre espace de session, d'où la demande de reconnexion.
+    scope: "/",
+    // Identifie l'app de façon stable, indépendamment de start_url.
+    id: "/",
     display: "standalone",
     orientation: "portrait",
     lang: "fr",

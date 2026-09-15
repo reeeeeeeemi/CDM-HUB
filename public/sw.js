@@ -35,20 +35,21 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const url = (event.notification.data && event.notification.data.url) || "/";
+  const target = new URL(url, self.location.origin).href;
 
   event.waitUntil(
-    (async () => {
-      const open = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-      // Réutiliser la fenêtre déjà ouverte : en ouvrir une seconde laisserait
-      // deux copies de l'app côte à côte.
-      for (const c of open) {
-        if ("focus" in c) {
-          await c.focus();
-          if ("navigate" in c) await c.navigate(url).catch(() => {});
-          return;
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      // Une fenêtre de l'app est déjà ouverte : s'y rendre plutôt que d'en
+      // ouvrir une seconde à côté.
+      for (const c of list) {
+        if (c.url && new URL(c.url).origin === self.location.origin && "focus" in c) {
+          if ("navigate" in c) c.navigate(target).catch(() => {});
+          return c.focus();
         }
       }
-      await self.clients.openWindow(url);
-    })()
+      // Sinon ouvrir l'app. openWindow doit être atteint sans attente
+      // superflue : iOS bascule sur le navigateur si on tarde trop.
+      return self.clients.openWindow(target);
+    })
   );
 });
