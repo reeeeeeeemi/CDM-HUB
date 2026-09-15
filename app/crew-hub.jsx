@@ -1815,12 +1815,17 @@ a{text-decoration:none;color:inherit;}
 .card:active{transform:translateY(0);}
 .card.past{opacity:.66;}
 .card-stripe{width:6px;background:var(--cat);flex-shrink:0;}
-.card-body{padding:11px 14px;flex:1;min-width:0;display:flex;align-items:flex-start;gap:12px;}
+/* stretch : la colonne de droite occupe toute la hauteur de la carte,
+   condition pour que le compteur puisse être poussé tout en bas. */
+.card-body{padding:11px 14px;flex:1;min-width:0;display:flex;align-items:stretch;gap:12px;}
 .card-main{flex:1;min-width:0;}
 .card-main .tag{margin-bottom:6px;}
 /* flex-shrink:0 : la colonne garde sa largeur, c'est le titre qui passe
    à la ligne — l'inverse tasserait « Toi : peut-être » en accordéon. */
 .card-side{flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:6px;text-align:right;}
+/* Toujours dans le coin bas droit, que la personne ait répondu ou non :
+   sans réponse, la colonne perdait une ligne et le compteur remontait. */
+.card-side .count{margin-top:auto;}
 .tag{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:4px 10px;border-radius:20px;white-space:nowrap;}
 .tag.sm{font-size:11.5px;padding:3px 9px;}
 .tag.ghost{background:var(--bg);color:var(--muted);}
