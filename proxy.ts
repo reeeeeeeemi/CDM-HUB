@@ -47,10 +47,16 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   // /invite doit être atteint sans compte : la page y construit elle-même le
   // retour vers le jeton une fois l'inscription faite.
+  //
+  // /event aussi, et pour une autre raison : WhatsApp et Messenger chargent
+  // le lien depuis leurs serveurs, sans cookie, pour en tirer un aperçu. Une
+  // redirection vers /login leur ferait afficher l'écran de connexion à la
+  // place du plan. La page décide elle-même quoi montrer à un non-membre.
   const isPublic =
     pathname.startsWith("/login") ||
     pathname.startsWith("/auth") ||
-    pathname.startsWith("/invite");
+    pathname.startsWith("/invite") ||
+    pathname.startsWith("/event");
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();

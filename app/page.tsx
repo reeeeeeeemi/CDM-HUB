@@ -1,83 +1,13 @@
 import { redirect } from "next/navigation";
 
-import { createClient } from "@/lib/supabase/server";
-
-import CrewHub from "./crew-hub";
-import { createInvite } from "@/lib/actions/invite";
-import { setNotifyCity, setNotifyPrefs } from "@/lib/actions/profile";
-import { GROUP } from "@/lib/brand";
-
-import { signOut } from "./login/actions";
+import { Hub, NotYet, readViewer } from "./hub";
 import "./login/login.css";
 
 export default async function Page() {
-  const supabase = await createClient();
+  const viewer = await readViewer();
 
-  // getUser valide le jeton auprès de Supabase. getSession se contenterait de
-  // lire le cookie, qui est falsifiable — ne jamais s'en servir pour décider
-  // d'un accès côté serveur.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  if (!viewer) redirect("/login");
+  if (!viewer.isMember) return <NotYet viewer={viewer} />;
 
-  if (!user) {
-    redirect("/login");
-  }
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("pseudo, city, notify_big, notify_city, notify_mine")
-    .eq("id", user.id)
-    .single();
-
-  // Le RLS ne renvoie cette table qu'aux membres : zéro ligne signifie que le
-  // compte existe mais n'a pas encore été invité dans le groupe.
-  const { data: membership } = await supabase
-    .from("members")
-    .select("user_id")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (!membership) {
-    return (
-      <div className="auth">
-        <div className="auth-badge" aria-hidden="true">🔒</div>
-        <p className="auth-kicker">{GROUP}</p>
-        <h1 className="auth-title">Presque !</h1>
-        <p className="auth-sub">
-          Ton compte est créé, {profile?.pseudo ?? user.email}. Il faut maintenant qu&apos;on
-          t&apos;ajoute au groupe pour que tu voies les plans.
-        </p>
-        <p className="auth-msg ok">Demande à Rémi de t&apos;ajouter, puis recharge cette page.</p>
-        <form action={signOut}>
-          <button className="auth-submit" type="submit" style={{ marginTop: 20 }}>
-            Se déconnecter
-          </button>
-        </form>
-        <p className="auth-note">
-          Connecté avec {user.email}. Ce n&apos;est pas toi ? Déconnecte-toi et reprends avec le bon
-          compte.
-        </p>
-      </div>
-    );
-  }
-
-  // `me` est l'identifiant : c'est lui qui sert aux comparaisons et qui part
-  // en base. Le pseudo ne sert qu'à l'affichage.
-  return (
-    <CrewHub
-      me={user.id}
-      meName={profile?.pseudo ?? "moi"}
-      onSignOut={signOut}
-      notifyCity={profile?.city ?? ""}
-      onSetCity={setNotifyCity}
-      notifyPrefs={{
-        big: profile?.notify_big ?? true,
-        city: profile?.notify_city ?? true,
-        mine: profile?.notify_mine ?? true,
-      }}
-      onSetPrefs={setNotifyPrefs}
-      onInvite={createInvite}
-    />
-  );
+  return <Hub viewer={viewer} />;
 }

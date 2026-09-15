@@ -6,7 +6,7 @@ import {
   X, Trash2, Sparkles, Send, Wallet, MessageCircle, Link2,
   ExternalLink, MessageSquare, ListTodo, CheckCircle2, Circle, CalendarClock, Lock,
   Car, Plane, TrainFront, UserPlus, Navigation, CalendarX, AlertTriangle, CalendarPlus,
-  House, Map as MapIcon, MapPinned, ShoppingCart, BedDouble,
+  House, Map as MapIcon, MapPinned, ShoppingCart, BedDouble, Share2,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ *
@@ -358,9 +358,10 @@ function usePush() {
  *          notifyCity?: string, onSetCity?: ((city: string) => void) | null,
  *          onInvite?: (() => Promise<{ url?: string, error?: string }>) | null,
  *          notifyPrefs?: { big: boolean, city: boolean, mine: boolean } | null,
- *          onSetPrefs?: ((prefs: Record<string, boolean>) => void) | null }} props
+ *          onSetPrefs?: ((prefs: Record<string, boolean>) => void) | null,
+ *          initialEvent?: string | null }} props
  */
-export default function App({ me: meFromAuth = null, meName = "", onSignOut = null, notifyCity = "", onSetCity = null, onInvite = null, notifyPrefs = null, onSetPrefs = null }) {
+export default function App({ me: meFromAuth = null, meName = "", onSignOut = null, notifyCity = "", onSetCity = null, onInvite = null, notifyPrefs = null, onSetPrefs = null, initialEvent = null }) {
   const [me, setMe] = useState(meFromAuth);
   const [tab, setTab] = useState("events");
   const [scale, setScale] = useState("big");
@@ -374,17 +375,45 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
   const setCity = scale === "big" ? setCityBig : setCityDaily;
   const [events, setEvents] = useState([]);
   const [availability, setAvailability] = useState([]);
-  const [selected, setSelected] = useState(null);
+  // Renseigné quand on arrive par un lien partagé ou une notification.
+  const [selected, setSelected] = useState(initialEvent || null);
   const [modal, setModal] = useState(null);
   const [loading, setLoading] = useState(true);
   const [newCities, setNewCities] = useState(new Set());
 
   const [loadError, setLoadError] = useState("");
 
-  // Le retour du navigateur referme ce qui est ouvert, plutôt que de quitter.
-  const closeEvent = useCallback(() => setSelected(null), []);
+  /**
+   * Ouvrir un event change l'URL sans recharger la page. pushState est
+   * intégré au routeur de Next, qui reste donc d'accord avec ce qui est
+   * affiché — et le lien devient partageable.
+   */
+  const openEvent = useCallback((id) => {
+    setSelected(id);
+    window.history.pushState({ hubEvent: true }, "", `/event/${id}`);
+  }, []);
+
+  const closeEvent = useCallback(() => {
+    setSelected(null);
+    // Si c'est nous qui avons empilé l'entrée, on la dépile : le bouton
+    // Retour de la fiche et celui du navigateur laissent le même historique.
+    if (window.history.state?.hubEvent) window.history.back();
+    // Sinon on vient d'un lien externe : réécrire l'URL sans toucher à
+    // l'historique, pour ne pas renvoyer le visiteur d'où il venait.
+    else if (window.location.pathname !== "/") window.history.replaceState(null, "", "/");
+  }, []);
+
+  // Le retour du navigateur fait foi : on relit l'URL plutôt que de deviner.
+  useEffect(() => {
+    const onPop = () => {
+      const m = window.location.pathname.match(/^\/event\/([^/]+)/);
+      setSelected(m ? m[1] : null);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
   const closeModal = useCallback(() => setModal(null), []);
-  useCloseOnBack(Boolean(selected), closeEvent);
   useCloseOnBack(Boolean(modal), closeModal);
 
   const reload = useCallback(async () => {
@@ -479,9 +508,9 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
 
   const delEvent = useCallback(async (id) => {
     setEvents((prev) => prev.filter((e) => e.id !== id));
-    setSelected(null);
+    closeEvent();
     await persist(() => db.deleteEvent(id));
-  }, [persist]);
+  }, [persist, closeEvent]);
 
   const actions = useMemo(() => ({
     // Recliquer sur sa réponse la retire : on redevient « sans réponse »,
@@ -646,7 +675,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
   /* eslint-enable @typescript-eslint/no-unused-vars */
 
   // Le titre du header ramène à la liste, quel que soit l'endroit où on est.
-  const goHome = () => { setSelected(null); setTab("events"); };
+  const goHome = () => { closeEvent(); setTab("events"); };
 
   const pickCity = (c) => {
     setCity(c);
@@ -711,7 +740,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
                     </button>
                   ))}
                 </div>
-                <EventsView data={filtered} me={me} onOpen={setSelected} scale={scale} />
+                <EventsView data={filtered} me={me} onOpen={openEvent} scale={scale} />
               </>
             )}
             {tab === "avail" && (
@@ -951,6 +980,27 @@ function EventCard({ ev, me, onOpen, past }) {
 // ---------- event detail ----------
 function EventDetail({ ev, me, actions, availability, onBack, places }) {
   const [confirmDel, setConfirmDel] = useState(false);
+  const [shared, setShared] = useState(false);
+
+  /**
+   * Le partage natif ouvre le menu du téléphone — WhatsApp, Messenger, SMS,
+   * selon ce qui est installé. Absent sur ordinateur et hors HTTPS : on
+   * recopie le lien, ce qui revient au même en deux gestes de plus.
+   */
+  const share = async () => {
+    const url = `${window.location.origin}/event/${ev.id}`;
+    const line = ev.date ? `${ev.title} — ${fmtRange(ev.date, ev.endDate)}` : ev.title;
+    if (navigator.share) {
+      // Annuler le partage lève une exception : ce n'est pas une erreur.
+      try { await navigator.share({ title: ev.title, text: line, url }); } catch {}
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setShared(true);
+      setTimeout(() => setShared(false), 2000);
+    } catch {}
+  };
   const cat = CATS[ev.category] || CATS.autre;
   const cd = countdown(ev.date, ev.endDate, ev.time);
   const groups = { in: [], maybe: [], out: [] };
@@ -968,7 +1018,12 @@ function EventDetail({ ev, me, actions, availability, onBack, places }) {
   return (
     <div className="detail">
       <div className="detail-hero" style={{ background: `linear-gradient(135deg, ${cat.color}, ${cat.color}cc)` }}>
-        <button className="ghost-btn light" onClick={onBack}><ChevronLeft size={18} /> Retour</button>
+        <div className="detail-top">
+          <button className="ghost-btn light" onClick={onBack}><ChevronLeft size={18} /> Retour</button>
+          <button className="ghost-btn light" onClick={share}>
+            {shared ? <><Check size={16} /> Lien copié</> : <><Share2 size={16} /> Partager</>}
+          </button>
+        </div>
         <div className="detail-emoji">{cat.emoji}</div>
         <div className="detail-tags">
           <span className="tag light">{cat.label}</span>
@@ -1801,6 +1856,7 @@ a{text-decoration:none;color:inherit;}
 .info-row .soft{color:var(--muted);font-weight:400;}
 .detail-desc{margin:18px 0;padding:14px 16px;border-left:3px solid var(--accent);background:var(--card);border-radius:0 14px 14px 0;line-height:1.6;color:var(--ink);font-size:16.5px;white-space:pre-wrap;}
 
+.detail-top{display:flex;align-items:center;justify-content:space-between;gap:10px;}
 .cal-block{margin-top:14px;}
 .cal-label{display:flex;align-items:center;gap:7px;font-weight:700;font-size:13px;margin-bottom:8px;}
 .cal-row{display:flex;gap:9px;}

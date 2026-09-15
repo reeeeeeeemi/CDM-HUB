@@ -119,7 +119,7 @@ export async function notifyNewEvent(eventId: string, title: string, scale: stri
   return deliver(data as Target[], {
     title: big ? "✨ Nouveau big event" : `Nouveau plan${city ? ` à ${city}` : ""}`,
     body: title,
-    url: "/",
+    url: `/event/${eventId}`,
     tag: `event:${eventId}`,
   });
 }
@@ -133,7 +133,7 @@ export async function notifyEventActivity(eventId: string, title: string, what: 
   return deliver(data as Target[], {
     title,
     body: what,
-    url: "/",
+    url: `/event/${eventId}`,
     tag: `event:${eventId}`,
   });
 }
