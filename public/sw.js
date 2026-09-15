@@ -37,19 +37,39 @@ self.addEventListener("notificationclick", (event) => {
   const url = (event.notification.data && event.notification.data.url) || "/";
   const target = new URL(url, self.location.origin).href;
 
+  const mine = (c) => {
+    try {
+      return c.url && new URL(c.url).origin === self.location.origin;
+    } catch {
+      return false;
+    }
+  };
+
   event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
-      // Une fenêtre de l'app est déjà ouverte : s'y rendre plutôt que d'en
-      // ouvrir une seconde à côté.
-      for (const c of list) {
-        if (c.url && new URL(c.url).origin === self.location.origin && "focus" in c) {
-          if ("navigate" in c) c.navigate(target).catch(() => {});
-          return c.focus();
+    (async () => {
+      /*
+       * Sur iOS, toucher la notification lance déjà l'app installée : sa
+       * fenêtre met simplement un instant à exister. Appeler openWindow tout
+       * de suite revenait à demander une seconde ouverture, que le système
+       * confiait au navigateur — lequel a son propre espace de session, d'où
+       * l'écran de connexion alors qu'on était déjà connecté.
+       *
+       * On laisse donc sa chance à la fenêtre d'apparaître avant de conclure
+       * que personne ne l'a ouverte. Les paliers sont courts : sur Android,
+       * où rien ne se lance tout seul, ils ne coûtent qu'une seconde au plus.
+       */
+      for (const wait of [0, 120, 200, 300, 400]) {
+        if (wait) await new Promise((r) => setTimeout(r, wait));
+        const list = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+        const c = list.find(mine);
+        if (c) {
+          if ("navigate" in c) await c.navigate(target).catch(() => {});
+          if ("focus" in c) await c.focus().catch(() => {});
+          return;
         }
       }
-      // Sinon ouvrir l'app. openWindow doit être atteint sans attente
-      // superflue : iOS bascule sur le navigateur si on tarde trop.
-      return self.clients.openWindow(target);
-    })
+      // Personne n'a rien ouvert : c'est bien à nous de le faire.
+      await self.clients.openWindow(target);
+    })()
   );
 });
