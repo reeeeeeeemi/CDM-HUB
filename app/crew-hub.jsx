@@ -1822,10 +1822,10 @@ a{text-decoration:none;color:inherit;}
 .card-main .tag{margin-bottom:6px;}
 /* flex-shrink:0 : la colonne garde sa largeur, c'est le titre qui passe
    à la ligne — l'inverse tasserait « Toi : peut-être » en accordéon. */
-.card-side{flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:6px;text-align:right;}
-/* Toujours dans le coin bas droit, que la personne ait répondu ou non :
-   sans réponse, la colonne perdait une ligne et le compteur remontait. */
-.card-side .count{margin-top:auto;}
+/* space-between répartit les trois repères à intervalles égaux sur toute
+   la hauteur : le compte à rebours en haut, le compteur en bas, ta
+   réponse au milieu. Le gap ne sert plus que de distance minimale. */
+.card-side{flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;gap:6px;text-align:right;}
 .tag{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:4px 10px;border-radius:20px;white-space:nowrap;}
 .tag.sm{font-size:11.5px;padding:3px 9px;}
 .tag.ghost{background:var(--bg);color:var(--muted);}
