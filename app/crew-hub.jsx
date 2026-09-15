@@ -1629,8 +1629,10 @@ a{text-decoration:none;color:inherit;}
 .hd-menu-sec{font-weight:700;font-size:13.5px;margin-bottom:3px;}
 .hd-menu-hint{color:var(--muted);font-size:12.5px;line-height:1.45;margin:0 0 10px;}
 .hd-menu-cities{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;}
-.hd-menu-link{display:flex;align-items:center;gap:9px;padding:11px 2px;font-weight:600;font-size:14px;color:var(--ink);border-bottom:1px solid var(--line);}
-.hd-menu-out{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);}
+.hd-menu-link{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:14px;
+  padding:12px;border-radius:12px;background:var(--accent);color:#fff;font-weight:700;font-size:14px;}
+.hd-menu-link:hover{filter:brightness(1.08);}
+.hd-menu-out{margin-top:10px;}
 .hd-menu-out button{width:100%;padding:11px;border-radius:12px;background:var(--bg);
   font-family:inherit;font-weight:600;font-size:14px;color:var(--muted);}
 .hd-menu-out button:hover{background:#EDEAE3;color:var(--ink);}
