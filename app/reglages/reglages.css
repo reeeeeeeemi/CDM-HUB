@@ -2,17 +2,18 @@
    hors de crew-hub et de son bloc <style>. */
 .rg {
   --bg:#F4F2ED; --card:#FFFFFF; --ink:#211D2B; --muted:#726C7E;
-  --line:#E6E2D8; --accent:#B4451F;
+  --line:#E6E2D8; --accent:#B4451F; --accent-soft:#FBEBE4;
   min-height:100dvh; background:var(--bg); color:var(--ink);
   padding:14px 18px calc(40px + env(safe-area-inset-bottom));
   font-size:15px;
 }
 .rg-head{display:flex;align-items:center;gap:13px;margin:6px 0 22px;}
-/* Carré à contour terracotta, comme les autres actions de l'app. */
+/* Carré plein en terracotta pâle : le contour seul se perdait sur le fond,
+   qui est de la même famille de teintes. Assez petit pour rester un retour. */
 .rg-back{flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;
-  width:38px;height:38px;border-radius:12px;border:2px solid var(--accent);color:var(--accent);background:transparent;}
+  width:36px;height:36px;border-radius:11px;border:1.5px solid var(--accent);
+  color:var(--accent);background:var(--accent-soft);}
 .rg-back:hover{background:var(--accent);color:#fff;}
-.rg-kicker{font-size:11px;font-weight:700;letter-spacing:1.6px;text-transform:uppercase;color:var(--accent);margin-bottom:1px;}
 .rg-head h1{font-family:'Bricolage Grotesque',system-ui,sans-serif;font-size:29px;font-weight:800;letter-spacing:-.8px;line-height:1;}
 
 .rg-flash{background:#ECFDF5;color:#047857;border-radius:10px;padding:9px 12px;font-size:13px;font-weight:600;margin-bottom:12px;}

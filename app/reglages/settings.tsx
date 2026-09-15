@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, Check, Bell, Users, UserPen, Link2, MapPin } from "lucide-react";
 
-import { CITIES, GROUP } from "@/lib/brand";
+import { CITIES } from "@/lib/brand";
 import { usePush, PREFS } from "@/lib/use-push";
 
 type Member = { id: string; pseudo: string; city: string };
@@ -83,10 +83,7 @@ export default function Settings({
         <Link className="rg-back" href="/" aria-label="Revenir au hub">
           <ChevronLeft size={19} strokeWidth={2.4} />
         </Link>
-        <div>
-          <p className="rg-kicker">{GROUP}</p>
-          <h1>Réglages</h1>
-        </div>
+        <h1>Réglages</h1>
       </header>
 
       {saved && <p className="rg-flash">{saved}</p>}
