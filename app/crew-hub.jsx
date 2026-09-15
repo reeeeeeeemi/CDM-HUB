@@ -227,6 +227,48 @@ function useCloseOnBack(open, close) {
   }, [open, close]);
 }
 
+/**
+ * Champ de lieu, avec rappel de ce que le groupe a déjà saisi.
+ *
+ * Les suggestions n'apparaissent qu'à partir de 3 caractères : en deçà la
+ * liste proposerait presque tout, et gênerait la frappe au lieu de l'aider.
+ */
+function PlaceInput({ value, onChange, places, placeholder, onEnter }) {
+  const [open, setOpen] = useState(true);
+  const q = value.trim().toLowerCase();
+  const hits =
+    q.length >= 3
+      ? (places || []).filter((p) => {
+          const l = p.toLowerCase();
+          return l.includes(q) && l !== q;
+        }).slice(0, 5)
+      : [];
+
+  return (
+    <div className="ac">
+      <input
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") setOpen(false);
+          if (e.key === "Enter") { setOpen(false); onEnter?.(); }
+        }}
+      />
+      {open && hits.length > 0 && (
+        <div className="ac-list">
+          {hits.map((pl) => (
+            <button key={pl} type="button" className="ac-item"
+              onClick={() => { onChange(pl); setOpen(false); }}>
+              <MapPin size={13} /> {pl}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---------- notifications ----------
 // Les trois règles, telles qu'elles apparaissent dans le menu. Les clés
 // correspondent aux colonnes notify_* de profiles.
@@ -620,6 +662,17 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
     return { up: keyed.filter((x) => !isPast(x.e)).map((x) => x.e), past: keyed.filter((x) => isPast(x.e)).reverse().map((x) => x.e) };
   }, [events, scale, city]);
 
+  // Tous les lieux déjà écrits par le groupe : ceux des events et ceux des
+  // sondages. Rien à demander à la base, tout est déjà chargé.
+  const places = useMemo(() => {
+    const all = new Set();
+    events.forEach((e) => {
+      if (e.place) all.add(e.place.trim());
+      (e.placePoll || []).forEach((o) => o.label && all.add(o.label.trim()));
+    });
+    return [...all].filter(Boolean).sort((a, b) => a.localeCompare(b, "fr"));
+  }, [events]);
+
   const selectedEvent = events.find((e) => e.id === selected);
 
   return (
@@ -632,7 +685,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
           {/* Le header reste en place partout : liste comme fiche d'event. */}
           <Header meName={meName} onSignOut={onSignOut} notifyCity={notifyCity} onSetCity={onSetCity} onHome={goHome} onInvite={onInvite} notifyPrefs={notifyPrefs} onSetPrefs={onSetPrefs} />
           {selectedEvent ? (
-            <EventDetail ev={selectedEvent} me={me} actions={actions} availability={availability} onBack={closeEvent} />
+            <EventDetail ev={selectedEvent} me={me} actions={actions} availability={availability} onBack={closeEvent} places={places} />
           ) : (
             <>
           {loadError && (
@@ -676,7 +729,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
           )}
         </>
       )}
-      {modal === "event" && <EventForm defScale={scale} defCity={city !== "all" ? city : ""} onClose={closeModal} onSave={addEvent} />}
+      {modal === "event" && <EventForm defScale={scale} defCity={city !== "all" ? city : ""} onClose={closeModal} onSave={addEvent} places={places} />}
     </div>
   );
 }
@@ -896,7 +949,7 @@ function EventCard({ ev, me, onOpen, past }) {
 }
 
 // ---------- event detail ----------
-function EventDetail({ ev, me, actions, availability, onBack }) {
+function EventDetail({ ev, me, actions, availability, onBack, places }) {
   const [confirmDel, setConfirmDel] = useState(false);
   const cat = CATS[ev.category] || CATS.autre;
   const cd = countdown(ev.date, ev.endDate, ev.time);
@@ -934,9 +987,14 @@ function EventDetail({ ev, me, actions, availability, onBack }) {
         {ev.place && <div className="info-row"><MapPin size={18} /><div><b>{ev.place}</b></div></div>}
 
         {ev.date && (
-          <div className="cal-row">
-            <button className="cal-btn" onClick={() => downloadICS(ev)}><CalendarPlus size={16} /> Apple / iCal</button>
-            <a className="cal-btn" href={googleCalUrl(ev)} target="_blank" rel="noopener noreferrer"><CalendarPlus size={16} /> Google Agenda</a>
+          <div className="cal-block">
+            {/* L'action d'abord, la destination ensuite : les deux boutons
+                nommaient un agenda sans jamais dire ce qu'ils faisaient. */}
+            <div className="cal-label"><CalendarPlus size={15} /> Ajouter à mon agenda</div>
+            <div className="cal-row">
+              <button className="cal-btn" onClick={() => downloadICS(ev)}>Apple / iCal</button>
+              <a className="cal-btn" href={googleCalUrl(ev)} target="_blank" rel="noopener noreferrer">Google Agenda</a>
+            </div>
           </div>
         )}
 
@@ -970,7 +1028,7 @@ function EventDetail({ ev, me, actions, availability, onBack }) {
         {modOn(ev, "transport") && <Transport ev={ev} me={me} actions={actions} />}
         {modOn(ev, "hosting") && <Hosting ev={ev} me={me} actions={actions} />}
         {modOn(ev, "datePoll") && <DatePoll ev={ev} me={me} isCreator={isCreator} actions={actions} availability={availability} />}
-        {modOn(ev, "placePoll") && <PlacePoll ev={ev} me={me} isCreator={isCreator} actions={actions} />}
+        {modOn(ev, "placePoll") && <PlacePoll ev={ev} me={me} isCreator={isCreator} actions={actions} places={places} />}
         {modOn(ev, "todos") && <TodoList ev={ev} me={me} isCreator={isCreator} actions={actions} kind="todo" />}
         {modOn(ev, "courses") && <TodoList ev={ev} me={me} isCreator={isCreator} actions={actions} kind="course" />}
 
@@ -1080,7 +1138,7 @@ function Transport({ ev, me, actions }) {
 }
 
 // ---------- sondage de lieu ----------
-function PlacePoll({ ev, me, isCreator, actions }) {
+function PlacePoll({ ev, me, isCreator, actions, places }) {
   const [label, setLabel] = useState("");
   const [url, setUrl] = useState("");
   const poll = [...(ev.placePoll || [])].sort((a, b) => b.votes.length - a.votes.length);
@@ -1106,7 +1164,7 @@ function PlacePoll({ ev, me, isCreator, actions }) {
         );
       })}
       <div className="placeadd">
-        <input value={label} placeholder="Nom du lieu — Ex. Le Bibent" onChange={(e) => setLabel(e.target.value)} />
+        <PlaceInput value={label} onChange={setLabel} places={places} placeholder="Nom du lieu — Ex. Le Bibent" onEnter={add} />
         <div className="placeadd-row">
           <input value={url} placeholder="Lien Google Maps (optionnel)" onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
           <button className="addbtn" onClick={add} disabled={!label.trim()}><Plus size={18} /></button>
@@ -1182,7 +1240,7 @@ function DatePoll({ ev, me, isCreator, actions, availability }) {
   const badRange = Boolean(d && d2 && d2 < d);
   const add = () => {
     if (!d || badRange) return;
-    actions.addDate(ev.id, d, isBig ? d2 : "");
+    actions.addDate(ev.id, d, isBig && d2 && d2 !== d ? d2 : "");
     setD(""); setD2("");
   };
   // Une indispo compte si elle recoupe le créneau, pas seulement son premier jour.
@@ -1204,7 +1262,7 @@ function DatePoll({ ev, me, isCreator, actions, availability }) {
           <div className="pollrow" key={o.id}>
             <button className={"pollvote" + (voted ? " on" : "")} onClick={() => actions.voteDate(ev.id, o.id)}><Check size={14} /> {o.votes.length}</button>
             <div className="pollinfo">
-              <b>{pollRange(o.date, o.endDate)}</b>
+              <span className="polldate">{pollRange(o.date, o.endDate)}</span>
               {o.votes.length > 0 && <div className="pollnames">{o.votes.map(nameOf).join(", ")}</div>}
               {conf.length > 0 && <div className="pollwarn"><AlertTriangle size={12} /> Indispo : {conf.map(nameOf).join(", ")}</div>}
             </div>
@@ -1215,7 +1273,11 @@ function DatePoll({ ev, me, isCreator, actions, availability }) {
       })}
       <div className="polladd">
         <label className="polladd-f"><span>{isBig ? "Du" : "Date"}</span>
-          <input type="date" value={d} onChange={(e) => setD(e.target.value)} />
+          <input type="date" value={d} onChange={(e) => {
+            const v = e.target.value; setD(v);
+            // Même raison que dans le formulaire : placer le calendrier de fin.
+            if (v && (!d2 || d2 < v)) setD2(v);
+          }} />
         </label>
         {isBig && (
           <label className="polladd-f"><span>Au</span>
@@ -1450,7 +1512,7 @@ function ScaleSeg({ value, onChange }) {
   );
 }
 
-function EventForm({ defScale, defCity, onClose, onSave }) {
+function EventForm({ defScale, defCity, onClose, onSave, places }) {
   const [f, setF] = useState({
     title: "", category: "soiree", scale: defScale || "big", city: defCity || "",
     date: "", endDate: "", time: "", endTime: "", place: "", description: "",
@@ -1459,6 +1521,20 @@ function EventForm({ defScale, defCity, onClose, onSave }) {
     modules: { ...(defScale === "big" ? MODULES_BIG : MODULES_DAILY) },
   });
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  /**
+   * La date de début amorce celle de fin quand elle est vide ou devenue
+   * antérieure. Sans ça, iOS ouvre le calendrier de fin sur le mois courant :
+   * pour un ski en février 2027, il fallait faire défiler cinq mois.
+   * `min` seul ne suffit pas, Safari ne s'en sert pas pour se positionner.
+   */
+  const setStart = (e) => {
+    const v = e.target.value;
+    setF((prev) => ({
+      ...prev,
+      date: v,
+      endDate: v && (!prev.endDate || prev.endDate < v) ? v : prev.endDate,
+    }));
+  };
   const clear = (k) => () => setF({ ...f, [k]: "" });
   const isBig = f.scale === "big";
 
@@ -1485,7 +1561,8 @@ function EventForm({ defScale, defCity, onClose, onSave }) {
       if (f.airbnb.trim()) links.push({ kind: "airbnb", label: "Airbnb", url: f.airbnb.trim() });
       if (f.otherUrl.trim()) links.push({ kind: "other", label: f.otherLabel.trim() || "Lien", url: f.otherUrl.trim() });
     }
-    const endDate = isBig ? f.endDate : "";
+    // Une fin égale au début, c'est un event d'un jour : on ne la stocke pas.
+    const endDate = isBig && f.endDate && f.endDate !== f.date ? f.endDate : "";
     const modules = { ...f.modules, datePoll: f.usePoll ? true : f.modules.datePoll };
     onSave({
       title: f.title.trim(), category: f.category, scale: f.scale, city: f.city,
@@ -1505,7 +1582,7 @@ function EventForm({ defScale, defCity, onClose, onSave }) {
       {!f.usePoll && (isBig ? (
         <>
           <div className="row2">
-            <Field group label="Date de début"><Clearable value={f.date} onClear={clear("date")}><input type="date" value={f.date} onChange={set("date")} aria-label="Date de début" /></Clearable></Field>
+            <Field group label="Date de début"><Clearable value={f.date} onClear={clear("date")}><input type="date" value={f.date} onChange={setStart} aria-label="Date de début" /></Clearable></Field>
             <Field group label="Date de fin"><Clearable value={f.endDate} onClear={clear("endDate")}><input type="date" value={f.endDate} min={f.date} onChange={set("endDate")} aria-label="Date de fin" /></Clearable></Field>
           </div>
           {dateError && <p className="field-err" role="alert"><AlertTriangle size={14} /> {dateError}</p>}
@@ -1526,7 +1603,12 @@ function EventForm({ defScale, defCity, onClose, onSave }) {
         <span><b>Pas encore de date ?</b> Lancer un sondage de dates à la place<em>Parfait pour un plan lointain — vous voterez le créneau ensuite.</em></span>
       </label>
 
-      <Field label="Où ?"><input value={f.place} onChange={set("place")} placeholder="Adresse, bar, lieu…" /></Field>
+      {/* group : dans un <label>, un clic sur une suggestion serait renvoyé
+          au champ et rouvrirait la liste. */}
+      <Field group label="Où ?">
+        <PlaceInput value={f.place} onChange={(v) => setF({ ...f, place: v })} places={places}
+          placeholder="Adresse, bar, lieu…" />
+      </Field>
       <Field label="Détails (optionnel)"><textarea value={f.description} onChange={set("description")} rows={3} placeholder="Programme, ce qu'il faut ramener…" /></Field>
 
       <Field group label="Sections à activer" hint="Rien par défaut : coche ce dont tu as besoin, l'aperçu se remplit en dessous.">
@@ -1719,7 +1801,9 @@ a{text-decoration:none;color:inherit;}
 .info-row .soft{color:var(--muted);font-weight:400;}
 .detail-desc{margin:18px 0;padding:14px 16px;border-left:3px solid var(--accent);background:var(--card);border-radius:0 14px 14px 0;line-height:1.6;color:var(--ink);font-size:16.5px;white-space:pre-wrap;}
 
-.cal-row{display:flex;gap:9px;margin-top:14px;}
+.cal-block{margin-top:14px;}
+.cal-label{display:flex;align-items:center;gap:7px;font-weight:700;font-size:13px;margin-bottom:8px;}
+.cal-row{display:flex;gap:9px;}
 .cal-btn{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:11px;border-radius:12px;border:1.5px solid var(--line);background:var(--card);font-weight:600;font-size:13.5px;color:var(--ink);transition:.12s;}
 .cal-btn:hover{border-color:var(--accent);color:var(--accent);}
 .cal-hint{display:flex;align-items:center;gap:7px;background:var(--accent-soft);color:var(--accent);font-size:12.5px;font-weight:600;padding:9px 12px;border-radius:12px;margin-bottom:16px;}
@@ -1782,10 +1866,19 @@ a{text-decoration:none;color:inherit;}
 .tp-time{display:flex;flex-direction:column;gap:6px;margin-top:8px;font-size:13.5px;font-weight:600;}
 .tp-time em{font-style:normal;font-weight:400;color:var(--muted);}
 .tp-time input{padding:11px 13px;border:2px solid var(--line);border-radius:12px;font-size:16px;font-family:inherit;background:var(--card);color:var(--ink);}
+/* Autocomplétion des lieux : la liste se superpose au reste du formulaire,
+   d'où le position:relative sur le conteneur et le z-index sur la liste. */
+.ac{position:relative;}
+.ac-list{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:20;background:var(--card);border:1.5px solid var(--line);border-radius:12px;box-shadow:0 10px 26px rgba(0,0,0,.13);overflow:hidden;}
+.ac-item{display:flex;align-items:center;gap:8px;width:100%;padding:11px 13px;font-size:13.5px;font-weight:600;color:var(--ink);text-align:left;background:none;border:0;border-bottom:1px solid var(--line);}
+.ac-item:last-child{border-bottom:0;}
+.ac-item:hover{background:var(--bg);color:var(--accent);}
 .placeadd{display:flex;flex-direction:column;gap:8px;margin-top:12px;}
 .placeadd-row{display:flex;gap:8px;}
 .placeadd input{flex:1;min-width:0;padding:11px 13px;border:2px solid var(--line);border-radius:12px;font-size:16px;font-family:inherit;background:var(--card);color:var(--ink);}
-.pollinfo b{display:block;}
+/* La date porte la ligne sans l'écraser : un gras plein sur chaque
+   créneau rendait la liste illisible dès trois propositions. */
+.polldate{display:block;font-weight:600;letter-spacing:-.1px;}
 /* Le lien Maps est une cible tactile à part : il descend sous le nom du lieu
    et prend une pastille, pour ne pas se confondre avec lui. */
 .poll-maps{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;
