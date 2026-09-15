@@ -276,9 +276,10 @@ function PlaceInput({ value, onChange, places, placeholder, onEnter }) {
  * l'écran Onboarding ne s'affiche plus : l'identité est déjà connue.
  *
  * @param {{ me?: string | null, meName?: string, onSignOut?: (() => void | Promise<void>) | null,
- *          notifyCity?: string, initialEvent?: string | null }} props
+ *          notifyCity?: string, onSetCity?: ((city: string) => void) | null,
+ *          initialEvent?: string | null }} props
  */
-export default function App({ me: meFromAuth = null, meName = "", onSignOut = null, notifyCity = "", initialEvent = null }) {
+export default function App({ me: meFromAuth = null, meName = "", onSignOut = null, notifyCity = "", onSetCity = null, initialEvent = null }) {
   const [me, setMe] = useState(meFromAuth);
   const [tab, setTab] = useState("events");
   const [scale, setScale] = useState("big");
@@ -643,7 +644,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
       ) : (
         <>
           {/* Le header reste en place partout : liste comme fiche d'event. */}
-          <Header meName={meName} onSignOut={onSignOut} onHome={goHome} />
+          <Header meName={meName} onSignOut={onSignOut} onHome={goHome} notifyCity={notifyCity} onSetCity={onSetCity} />
           {selectedEvent ? (
             <EventDetail ev={selectedEvent} me={me} actions={actions} availability={availability} onBack={closeEvent} places={places} />
           ) : (
@@ -696,9 +697,12 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
 
 
 // ---------- header + tabs ----------
-function Header({ meName, onSignOut, onHome }) {
+function Header({ meName, onSignOut, onHome, notifyCity, onSetCity }) {
   const [open, setOpen] = useState(false);
   const [stuck, setStuck] = useState(false);
+  // Optimiste : la puce se coche tout de suite, l'enregistrement suit.
+  const [city, setCity] = useState(notifyCity || "");
+  const pick = (c) => { const next = city === c ? "" : c; setCity(next); onSetCity?.(next); };
 
   // Le filet sous le header n'apparaît qu'une fois du contenu passé dessous.
   useEffect(() => {
@@ -726,6 +730,19 @@ function Header({ meName, onSignOut, onHome }) {
                 invitations vivent maintenant sur /reglages. */}
             <div className="hd-menu" role="menu">
               <div className="hd-menu-me">{meName}</div>
+
+              {/* Ma ville, pas mes villes de notification : celle-ci ouvre
+                  l'onglet quotidien au bon endroit. Les villes qui font
+                  sonner le téléphone se cochent dans les Réglages. */}
+              <div className="hd-menu-sec">Ma ville</div>
+              <p className="hd-menu-hint">L&apos;onglet « Au quotidien » s&apos;ouvrira dessus.</p>
+              <div className="hd-menu-cities">
+                {CITY_LIST.map((c) => (
+                  <button key={c} type="button" className={"catchip city" + (city === c ? " on" : "")}
+                    onClick={() => pick(c)}>{CITIES[c]} {c}</button>
+                ))}
+              </div>
+
               <a className="hd-menu-link" href="/reglages">
                 <Settings2 size={15} /> Réglages
               </a>
@@ -788,8 +805,11 @@ function EventCard({ ev, me, onOpen, past }) {
           <span className="tag" style={{ color: cat.color, background: cat.color + "18" }}>{cat.emoji} {cat.label}</span>
           <h3 className="card-title">{ev.title}</h3>
           <div className="card-meta">
-            <span><CalendarDays size={14} /> {fmtRange(ev.date, ev.endDate)}{ev.time && !ev.endDate ? ` · ${ev.time}` : ""}</span>
-            {ev.city && <span>{cityEmoji(ev.city)} {ev.city}</span>}
+            {/* Chaque ligne commence par une gouttière de même largeur : un
+                SVG et un emoji ne mesurent pas pareil, et les deux textes
+                démarraient à deux verticales différentes. */}
+            <span><i className="mk"><CalendarDays size={13} /></i>{fmtRange(ev.date, ev.endDate)}{ev.time && !ev.endDate ? ` · ${ev.time}` : ""}</span>
+            {ev.city && <span><i className="mk">{cityEmoji(ev.city)}</i>{ev.city}</span>}
           </div>
         </div>
         {/* Colonne de droite : quand, ta réponse, combien de chauds. Les trois
@@ -1606,6 +1626,9 @@ a{text-decoration:none;color:inherit;}
   background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;
   box-shadow:0 18px 40px -12px rgba(20,17,28,.28);animation:up .16s cubic-bezier(.2,.8,.2,1);}
 .hd-menu-me{font-family:'Bricolage Grotesque';font-weight:800;font-size:17px;margin-bottom:14px;}
+.hd-menu-sec{font-weight:700;font-size:13.5px;margin-bottom:3px;}
+.hd-menu-hint{color:var(--muted);font-size:12.5px;line-height:1.45;margin:0 0 10px;}
+.hd-menu-cities{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;}
 .hd-menu-link{display:flex;align-items:center;gap:9px;padding:11px 2px;font-weight:600;font-size:14px;color:var(--ink);border-bottom:1px solid var(--line);}
 .hd-menu-out{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);}
 .hd-menu-out button{width:100%;padding:11px;border-radius:12px;background:var(--bg);
@@ -1666,6 +1689,8 @@ a{text-decoration:none;color:inherit;}
    à côte ou l'une sous l'autre selon la longueur de la date, si bien que
    deux cartes voisines ne se lisaient pas au même endroit. */
 .card-meta{display:flex;flex-direction:column;align-items:flex-start;gap:3px;margin:6px 0 0;color:var(--muted);font-size:12.5px;}
+.card-meta span{display:flex;align-items:center;min-width:0;}
+.mk{flex-shrink:0;width:19px;display:inline-flex;align-items:center;justify-content:center;font-style:normal;font-size:12px;line-height:1;}
 .card-meta span{display:inline-flex;align-items:center;gap:5px;}
 .count{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;color:var(--ink);}
 .mine{font-size:12.5px;font-weight:600;}

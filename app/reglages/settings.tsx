@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, Check, Bell, Users, UserPen, Link2, MapPin } from "lucide-react";
 
-import { CITIES } from "@/lib/brand";
+import { CITIES, GROUP } from "@/lib/brand";
 import { usePush, PREFS } from "@/lib/use-push";
 
 type Member = { id: string; pseudo: string; city: string };
@@ -78,8 +78,15 @@ export default function Settings({
   return (
     <div className="rg">
       <header className="rg-head">
-        <Link className="ghost-btn sm" href="/"><ChevronLeft size={15} /> Retour</Link>
-        <h1>Réglages</h1>
+        {/* Une flèche seule : le mot « Retour » ne disait rien que la flèche
+            ne dise déjà, et volait la place du titre. */}
+        <Link className="rg-back" href="/" aria-label="Revenir au hub">
+          <ChevronLeft size={19} strokeWidth={2.4} />
+        </Link>
+        <div>
+          <p className="rg-kicker">{GROUP}</p>
+          <h1>Réglages</h1>
+        </div>
       </header>
 
       {saved && <p className="rg-flash">{saved}</p>}
