@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import CrewHub from "./crew-hub";
 import { createInvite } from "@/lib/actions/invite";
 import { setNotifyCity, setNotifyPrefs } from "@/lib/actions/profile";
+import { GROUP } from "@/lib/brand";
 
 import { signOut } from "./login/actions";
 import "./login/login.css";
@@ -41,7 +42,7 @@ export default async function Page() {
     return (
       <div className="auth">
         <div className="auth-badge" aria-hidden="true">🔒</div>
-        <p className="auth-kicker">CDM</p>
+        <p className="auth-kicker">{GROUP}</p>
         <h1 className="auth-title">Presque !</h1>
         <p className="auth-sub">
           Ton compte est créé, {profile?.pseudo ?? user.email}. Il faut maintenant qu&apos;on

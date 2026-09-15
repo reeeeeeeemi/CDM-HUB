@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
+import { APP_NAME, APP_SHORT, DESCRIPTION } from "@/lib/brand";
 import "./globals.css";
 
 const inter = Inter({
@@ -13,12 +14,12 @@ const bricolage = Bricolage_Grotesque({
 });
 
 export const metadata: Metadata = {
-  title: "HUB Events CDM",
+  title: APP_NAME,
   description:
-    "Tous les évènements du CDM, du voyage annuel au ski jusqu'à la coinche du mardi.",
+    DESCRIPTION,
   appleWebApp: {
     capable: true,
-    title: "HUB CDM",
+    title: APP_SHORT,
     statusBarStyle: "default",
   },
   icons: {

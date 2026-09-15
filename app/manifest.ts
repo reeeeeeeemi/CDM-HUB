@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { APP_NAME, APP_SHORT } from "@/lib/brand";
 
 /**
  * Permet « Ajouter à l'écran d'accueil » : l'app se lance alors en plein
@@ -6,8 +7,8 @@ import type { MetadataRoute } from "next";
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "HUB Events CDM",
-    short_name: "HUB CDM",
+    name: APP_NAME,
+    short_name: APP_SHORT,
     description:
       "Le QG des plans de la bande : ce qui arrive, ce qu'on propose, qui est chaud.",
     start_url: "/",

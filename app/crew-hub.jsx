@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ *
- *  HUB Events CDM — prototype
+ *  HUB Events — le hub de plans d'un groupe d'amis
  *  NOTE backend (Supabase) : notifications push quand un event est créé
  *  dans une ville suivie / en global ; synchro Google Calendar (OAuth)
  *  pour remplir les Dispos via free/busy. Apple = pas d'API propre.
@@ -21,6 +21,7 @@ import {
 // sur la forme imbriquée héritée du prototype, et la traduction vit là-bas.
 import * as db from "@/lib/hub-data";
 import { nameOf } from "@/lib/hub-data";
+import { APP_NAME, CITIES } from "@/lib/brand";
 import {
   savePushSubscription, removePushSubscription, notifyNewEvent, notifyEventActivity,
 } from "@/lib/actions/push";
@@ -35,7 +36,6 @@ const CATS = {
   coinche: { label: "Coinche",     color: "#DB2777", emoji: "🃏" },
   autre:   { label: "Autre",       color: "#64748B", emoji: "📌" },
 };
-const CITIES = { Toulouse: "🌸", Bordeaux: "🍷", Paris: "🗼", Casablanca: "🕌", Rome: "🏛️" };
 const CITY_LIST = Object.keys(CITIES);
 // Toute ville hors liste garde une épingle en guise d'emoji.
 const cityEmoji = (c) => CITIES[c] || "📍";
@@ -173,7 +173,7 @@ function icsContent(ev) {
   }
   const esc = (s) => (s || "").replace(/[,;\\]/g, (m) => "\\" + m).replace(/\n/g, "\\n");
   return [
-    "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//HUB Events CDM//FR", "BEGIN:VEVENT",
+    "BEGIN:VCALENDAR", "VERSION:2.0", `PRODID:-//${APP_NAME}//FR`, "BEGIN:VEVENT",
     `UID:${ev.id}@cdm-hub`, `SUMMARY:${esc(ev.title)}`, dtStart, dtEnd,
     ev.place ? `LOCATION:${esc(ev.place + (ev.city ? ", " + ev.city : ""))}` : "",
     ev.description ? `DESCRIPTION:${esc(ev.description)}` : "",
@@ -733,7 +733,7 @@ function Header({ meName, onSignOut, notifyCity, onSetCity, onHome, onInvite, no
     <header className={"hd" + (stuck ? " stuck" : "")}>
       <h1 className="hd-title-wrap">
         <button type="button" className="hd-kicker" onClick={onHome} title="Revenir à l'accueil">
-          <Users size={13} /> HUB Events CDM
+          <Users size={13} /> {APP_NAME}
         </button>
       </h1>
       <div className="hd-menu-wrap">

@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { KeyRound, Send } from "lucide-react";
 
 import { updatePassword, type AuthState } from "@/app/login/actions";
+import { GROUP } from "@/lib/brand";
 import "@/app/login/login.css";
 
 const EMPTY: AuthState = {};
@@ -17,7 +18,7 @@ export function NewPasswordForm({ email }: { email: string }) {
         <KeyRound size={30} />
       </div>
 
-      <p className="auth-kicker">CDM</p>
+      <p className="auth-kicker">{GROUP}</p>
       <h1 className="auth-title">Nouveau mot de passe</h1>
       <p className="auth-sub">
         Choisis-en un pour {email}. Tu seras connecté dans la foulée.

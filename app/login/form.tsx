@@ -4,6 +4,7 @@ import { useActionState, useEffect, useState } from "react";
 import { KeyRound, PartyPopper, Send } from "lucide-react";
 
 import { requestReset, signIn, signUp, type AuthState } from "./actions";
+import { APP_NAME, GROUP, TAGLINE } from "@/lib/brand";
 import "./login.css";
 
 const EMPTY: AuthState = {};
@@ -42,7 +43,7 @@ export function LoginForm({ next = "" }: { next?: string }) {
         {isForgot ? <KeyRound size={30} /> : <PartyPopper size={30} />}
       </div>
 
-      <p className="auth-kicker">CDM</p>
+      <p className="auth-kicker">{GROUP}</p>
 
       {isForgot ? (
         <>
@@ -53,11 +54,10 @@ export function LoginForm({ next = "" }: { next?: string }) {
         </>
       ) : (
         <>
-          <h1 className="auth-title">HUB Events CDM</h1>
+          <h1 className="auth-title">{APP_NAME}</h1>
           <p className="auth-sub">
-            Pour retrouver tous les évènements organisés par le CDM, du voyage annuel au ski
-            jusqu&apos;à la coinche du mardi où Kenny est encore le pire joueur autour de la table.
-          </p>
+            {TAGLINE}
+                    </p>
         </>
       )}
 

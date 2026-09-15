@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
+import { GROUP } from "@/lib/brand";
 
 import "../../login/login.css";
 
@@ -45,7 +46,7 @@ export default async function InvitePage({ params }: PageProps<"/invite/[token]"
   return (
     <div className="auth">
       <div className="auth-badge" aria-hidden="true">🔗</div>
-      <p className="auth-kicker">CDM</p>
+      <p className="auth-kicker">{GROUP}</p>
       <h1 className="auth-title">{m.title}</h1>
       <p className="auth-sub">{m.text}</p>
       <Link className="auth-submit" href="/">Retour au hub</Link>
