@@ -967,10 +967,14 @@ function EventCard({ ev, me, onOpen, past }) {
             repères qu'on lit en diagonale sur une liste, alignés entre eux
             plutôt que dispersés aux quatre coins de la carte. */}
         <div className="card-side">
-          {noDate && !past ? <span className="cd poll"><CalendarClock size={12} /> Date à voter</span>
-            : cd && !past && <span className={"cd" + (cd.live ? " live" : cd.soon ? " hot" : "")}>{cd.text}</span>}
+          {/* Ta réponse colle au compte à rebours : les deux disent quand et
+              avec qui, on les lit d'un même coup d'œil. */}
+          <div className="card-when">
+            {mine && <span className="mine" style={{ color: RS[mine].color }}>Toi : {RS[mine].short}</span>}
+            {noDate && !past ? <span className="cd poll"><CalendarClock size={12} /> Date à voter</span>
+              : cd && !past && <span className={"cd" + (cd.live ? " live" : cd.soon ? " hot" : "")}>{cd.text}</span>}
+          </div>
           {!ev.place && modOn(ev, "placePoll") && !past && <span className="cd poll"><MapPinned size={12} /> Lieu à voter</span>}
-          {mine && <span className="mine" style={{ color: RS[mine].color }}>Toi : {RS[mine].short}</span>}
           <span className="count"><Users size={14} /> {going} chaud{going > 1 ? "s" : ""}</span>
         </div>
       </div>
@@ -982,6 +986,9 @@ function EventCard({ ev, me, onOpen, past }) {
 function EventDetail({ ev, me, actions, availability, onBack, places }) {
   const [confirmDel, setConfirmDel] = useState(false);
   const [shared, setShared] = useState(false);
+  // L'agenda ne se déplie qu'à la demande : les deux destinations
+  // occupaient en permanence une place qu'on ne leur utilise qu'une fois.
+  const [calOpen, setCalOpen] = useState(false);
 
   /**
    * Le partage natif ouvre le menu du téléphone — WhatsApp, Messenger, SMS,
@@ -1020,22 +1027,25 @@ function EventDetail({ ev, me, actions, availability, onBack, places }) {
     <div className="detail">
       <div className="detail-hero" style={{ background: `linear-gradient(135deg, ${cat.color}, ${cat.color}cc)` }}>
         <div className="detail-top">
-          <button className="ghost-btn light" onClick={onBack}><ChevronLeft size={18} /> Retour</button>
-          <button className="ghost-btn light" onClick={share}>
-            {shared ? <><Check size={16} /> Lien copié</> : <><Share2 size={16} /> Partager</>}
+          <button className="ghost-btn light sm" onClick={onBack}><ChevronLeft size={15} /> Retour</button>
+          <button className="ghost-btn light sm" onClick={share}>
+            {shared ? <><Check size={14} /> Lien copié</> : <><Share2 size={14} /> Partager</>}
           </button>
         </div>
         {ev.date && (
           <div className="cal-block">
             {/* Sous Partager : les deux gestes qu'on fait en découvrant un
-                plan — le transmettre, et le poser dans son agenda.
-                L'action d'abord, la destination ensuite : les boutons
-                nommaient un agenda sans jamais dire ce qu'ils faisaient. */}
-            <div className="cal-label"><CalendarPlus size={14} /> Ajouter à mon agenda</div>
-            <div className="cal-row">
-              <button className="cal-btn light" onClick={() => downloadICS(ev)}>Apple / iCal</button>
-              <a className="cal-btn light" href={googleCalUrl(ev)} target="_blank" rel="noopener noreferrer">Google Agenda</a>
-            </div>
+                plan — le transmettre, et le poser dans son agenda. */}
+            <button className="ghost-btn light sm" aria-expanded={calOpen}
+              onClick={() => setCalOpen((o) => !o)}>
+              <CalendarPlus size={14} /> Ajouter à mon agenda
+            </button>
+            {calOpen && (
+              <div className="cal-row">
+                <button className="cal-btn light" onClick={() => { downloadICS(ev); setCalOpen(false); }}>Apple / iCal</button>
+                <a className="cal-btn light" href={googleCalUrl(ev)} target="_blank" rel="noopener noreferrer">Google Agenda</a>
+              </div>
+            )}
           </div>
         )}
         <div className="detail-emoji">{cat.emoji}</div>
@@ -1826,6 +1836,9 @@ a{text-decoration:none;color:inherit;}
    la hauteur : le compte à rebours en haut, le compteur en bas, ta
    réponse au milieu. Le gap ne sert plus que de distance minimale. */
 .card-side{flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;gap:6px;text-align:right;}
+/* wrap : sur un écran étroit, ta réponse passe au-dessus plutôt que de
+   voler la largeur du titre. */
+.card-when{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:5px 7px;}
 .tag{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:4px 10px;border-radius:20px;white-space:nowrap;}
 .tag.sm{font-size:11.5px;padding:3px 9px;}
 .tag.ghost{background:var(--bg);color:var(--muted);}
@@ -1835,7 +1848,10 @@ a{text-decoration:none;color:inherit;}
 .cd.live{color:#fff;background:#0D9488;}
 .cd.poll{color:#B45309;background:#FEF3C7;}
 .card-title{font-size:17px;font-weight:700;line-height:1.2;}
-.card-meta{display:flex;flex-wrap:wrap;align-items:center;gap:4px 11px;margin:6px 0 0;color:var(--muted);font-size:12.5px;}
+/* Une ligne chacune, toujours : la date et la ville se retrouvaient côte
+   à côte ou l'une sous l'autre selon la longueur de la date, si bien que
+   deux cartes voisines ne se lisaient pas au même endroit. */
+.card-meta{display:flex;flex-direction:column;align-items:flex-start;gap:3px;margin:6px 0 0;color:var(--muted);font-size:12.5px;}
 .card-meta span{display:inline-flex;align-items:center;gap:5px;}
 .count{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;color:var(--ink);}
 .mine{font-size:12.5px;font-weight:600;}
@@ -1855,6 +1871,8 @@ a{text-decoration:none;color:inherit;}
 .detail-emoji{font-size:44px;margin:16px 0 10px;}
 .detail-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
 .ghost-btn{display:inline-flex;align-items:center;gap:4px;font-weight:600;font-size:14px;padding:7px 12px 7px 8px;border-radius:10px;color:var(--muted);}
+/* sm : dans le bandeau, ces boutons sont des raccourcis, pas le sujet. */
+.ghost-btn.sm{gap:5px;font-size:12.5px;padding:5px 10px;border-radius:9px;}
 .ghost-btn.light{background:rgba(255,255,255,.18);color:#fff;}
 .ghost-btn.danger{color:#DC2626;}
 .detail-title{font-size:29px;font-weight:800;line-height:1.05;}
@@ -1870,7 +1888,6 @@ a{text-decoration:none;color:inherit;}
 .cal-block{margin-top:12px;display:flex;flex-direction:column;align-items:flex-end;gap:7px;}
 .cal-btn.light{border-color:rgba(255,255,255,.4);background:rgba(255,255,255,.14);color:#fff;flex:0 0 auto;}
 .cal-btn.light:hover{background:rgba(255,255,255,.26);border-color:rgba(255,255,255,.7);color:#fff;}
-.cal-label{display:flex;align-items:center;gap:6px;font-weight:700;font-size:12px;opacity:.9;}
 .cal-row{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;}
 .cal-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:8px 12px;border-radius:11px;border:1.5px solid var(--line);background:var(--card);font-weight:600;font-size:12.5px;color:var(--ink);transition:.12s;}
 .cal-btn:hover{border-color:var(--accent);color:var(--accent);}
