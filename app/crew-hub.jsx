@@ -964,11 +964,12 @@ function EventCard({ ev, me, onOpen, past }) {
           </span>
         </div>
         <h3 className="card-title">{ev.title}</h3>
+        {/* Une seule rangée pour tout ce qui se lit d'un coup d'œil. Séparée,
+            la ligne « X chauds » coûtait un trait, sa marge et sa hauteur —
+            de quoi voir une carte de moins par écran. */}
         <div className="card-meta">
           <span><CalendarDays size={14} /> {fmtRange(ev.date, ev.endDate)}{ev.time && !ev.endDate ? ` · ${ev.time}` : ""}</span>
           {ev.city && <span>{cityEmoji(ev.city)} {ev.city}</span>}
-        </div>
-        <div className="card-foot">
           <span className="count"><Users size={14} /> {going} chaud{going > 1 ? "s" : ""}</span>
           {mine && <span className="mine" style={{ color: RS[mine].color }}>Toi : {RS[mine].short}</span>}
         </div>
@@ -1734,10 +1735,7 @@ const CSS = `
 h1,h2,h3{font-family:'Bricolage Grotesque',sans-serif;margin:0;letter-spacing:-.02em;}
 button{font-family:inherit;cursor:pointer;border:none;background:none;}
 a{text-decoration:none;color:inherit;}
-/* Des marges plus franches : les cartes touchaient les bords de l'écran,
-   et rien ne les détachait du fond. La largeur maximale ne sert que sur
-   grand écran, où une carte étirée sur 1200px est illisible. */
-.wrap{padding:14px 26px calc(120px + env(safe-area-inset-bottom));max-width:620px;margin:0 auto;}
+.wrap{padding:14px 18px calc(120px + env(safe-area-inset-bottom));}
 .center{display:flex;justify-content:center;align-items:center;min-height:100vh;min-height:100dvh;}
 .spinner{width:34px;height:34px;border:3px solid var(--accent-soft);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
@@ -1790,7 +1788,7 @@ a{text-decoration:none;color:inherit;}
   font-family:inherit;font-weight:600;font-size:14px;color:var(--muted);}
 .hd-menu-out button:hover{background:#EDEAE3;color:var(--ink);}
 
-.tabs{display:flex;gap:6px;padding:0 26px 4px;max-width:620px;margin:0 auto;}
+.tabs{display:flex;gap:6px;padding:0 18px 4px;}
 .load-err{display:flex;align-items:center;gap:9px;margin:0 18px 10px;padding:11px 13px;border-radius:12px;
   background:#FDECEC;color:#B91C1C;font-size:13px;font-weight:600;line-height:1.4;}
 .load-err span{flex:1;min-width:0;}
@@ -1812,13 +1810,13 @@ a{text-decoration:none;color:inherit;}
 .dot{position:absolute;top:-3px;right:-3px;width:11px;height:11px;background:#EF4444;border-radius:50%;border:2.5px solid var(--bg);}
 .dot.inline{position:static;display:inline-block;width:8px;height:8px;border:none;margin-left:1px;}
 
-.card{display:flex;width:100%;text-align:left;background:var(--card);border-radius:18px;margin-bottom:12px;overflow:hidden;border:1px solid var(--line);transition:transform .12s,box-shadow .12s;}
+.card{display:flex;width:100%;text-align:left;background:var(--card);border-radius:16px;margin-bottom:9px;overflow:hidden;border:1px solid var(--line);transition:transform .12s,box-shadow .12s;}
 .card:hover{transform:translateY(-2px);box-shadow:0 10px 26px -14px rgba(33,29,43,.4);}
 .card:active{transform:translateY(0);}
 .card.past{opacity:.66;}
 .card-stripe{width:6px;background:var(--cat);flex-shrink:0;}
-.card-body{padding:14px 16px;flex:1;min-width:0;}
-.card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:9px;}
+.card-body{padding:11px 14px;flex:1;min-width:0;}
+.card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px;}
 .card-cds{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:5px;}
 .tag{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:4px 10px;border-radius:20px;white-space:nowrap;}
 .tag.sm{font-size:11.5px;padding:3px 9px;}
@@ -1828,11 +1826,13 @@ a{text-decoration:none;color:inherit;}
 .cd.hot{color:#fff;background:#DB2777;}
 .cd.live{color:#fff;background:#0D9488;}
 .cd.poll{color:#B45309;background:#FEF3C7;}
-.card-title{font-size:18px;font-weight:700;line-height:1.2;}
-.card-meta{display:flex;flex-wrap:wrap;gap:12px;margin:9px 0 11px;color:var(--muted);font-size:13px;}
+.card-title{font-size:17px;font-weight:700;line-height:1.2;}
+/* Le compte se pousse à droite tant que la ligne tient ; au-delà elle
+   passe à deux lignes, ce qui reste la hauteur qu'on avait avant. */
+.card-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px 11px;margin:6px 0 0;color:var(--muted);font-size:12.5px;}
+.card-meta .count{margin-left:auto;}
 .card-meta span{display:inline-flex;align-items:center;gap:5px;}
-.card-foot{display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:10px;}
-.count{display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:600;color:var(--ink);}
+.count{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;color:var(--ink);}
 .mine{font-size:12.5px;font-weight:600;}
 .section-label{font-size:12px;font-weight:600;color:var(--muted);margin:20px 4px 12px;}
 
@@ -1846,7 +1846,7 @@ a{text-decoration:none;color:inherit;}
 /* La fiche vit désormais sous le header : elle ne doit plus réclamer
    toute la hauteur de l'écran, sinon la page dépasse d'autant. */
 .detail{min-height:auto;}
-.detail-hero{padding:16px 26px 30px;color:#fff;border-radius:0 0 26px 26px;}
+.detail-hero{padding:16px 18px 30px;color:#fff;border-radius:0 0 26px 26px;}
 .detail-emoji{font-size:44px;margin:16px 0 10px;}
 .detail-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
 .ghost-btn{display:inline-flex;align-items:center;gap:4px;font-weight:600;font-size:14px;padding:7px 12px 7px 8px;border-radius:10px;color:var(--muted);}
