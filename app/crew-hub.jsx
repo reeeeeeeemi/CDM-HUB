@@ -955,23 +955,23 @@ function EventCard({ ev, me, onOpen, past }) {
     <button className={"card" + (past ? " past" : "")} onClick={() => onOpen(ev.id)} style={{ "--cat": cat.color }}>
       <div className="card-stripe" />
       <div className="card-body">
-        <div className="card-top">
+        <div className="card-main">
           <span className="tag" style={{ color: cat.color, background: cat.color + "18" }}>{cat.emoji} {cat.label}</span>
-          <span className="card-cds">
-            {noDate && !past ? <span className="cd poll"><CalendarClock size={12} /> Date à voter</span>
-              : cd && !past && <span className={"cd" + (cd.live ? " live" : cd.soon ? " hot" : "")}>{cd.text}</span>}
-            {!ev.place && modOn(ev, "placePoll") && !past && <span className="cd poll"><MapPinned size={12} /> Lieu à voter</span>}
-          </span>
+          <h3 className="card-title">{ev.title}</h3>
+          <div className="card-meta">
+            <span><CalendarDays size={14} /> {fmtRange(ev.date, ev.endDate)}{ev.time && !ev.endDate ? ` · ${ev.time}` : ""}</span>
+            {ev.city && <span>{cityEmoji(ev.city)} {ev.city}</span>}
+          </div>
         </div>
-        <h3 className="card-title">{ev.title}</h3>
-        {/* Une seule rangée pour tout ce qui se lit d'un coup d'œil. Séparée,
-            la ligne « X chauds » coûtait un trait, sa marge et sa hauteur —
-            de quoi voir une carte de moins par écran. */}
-        <div className="card-meta">
-          <span><CalendarDays size={14} /> {fmtRange(ev.date, ev.endDate)}{ev.time && !ev.endDate ? ` · ${ev.time}` : ""}</span>
-          {ev.city && <span>{cityEmoji(ev.city)} {ev.city}</span>}
-          <span className="count"><Users size={14} /> {going} chaud{going > 1 ? "s" : ""}</span>
+        {/* Colonne de droite : quand, ta réponse, combien de chauds. Les trois
+            repères qu'on lit en diagonale sur une liste, alignés entre eux
+            plutôt que dispersés aux quatre coins de la carte. */}
+        <div className="card-side">
+          {noDate && !past ? <span className="cd poll"><CalendarClock size={12} /> Date à voter</span>
+            : cd && !past && <span className={"cd" + (cd.live ? " live" : cd.soon ? " hot" : "")}>{cd.text}</span>}
+          {!ev.place && modOn(ev, "placePoll") && !past && <span className="cd poll"><MapPinned size={12} /> Lieu à voter</span>}
           {mine && <span className="mine" style={{ color: RS[mine].color }}>Toi : {RS[mine].short}</span>}
+          <span className="count"><Users size={14} /> {going} chaud{going > 1 ? "s" : ""}</span>
         </div>
       </div>
     </button>
@@ -1815,9 +1815,12 @@ a{text-decoration:none;color:inherit;}
 .card:active{transform:translateY(0);}
 .card.past{opacity:.66;}
 .card-stripe{width:6px;background:var(--cat);flex-shrink:0;}
-.card-body{padding:11px 14px;flex:1;min-width:0;}
-.card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px;}
-.card-cds{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:5px;}
+.card-body{padding:11px 14px;flex:1;min-width:0;display:flex;align-items:flex-start;gap:12px;}
+.card-main{flex:1;min-width:0;}
+.card-main .tag{margin-bottom:6px;}
+/* flex-shrink:0 : la colonne garde sa largeur, c'est le titre qui passe
+   à la ligne — l'inverse tasserait « Toi : peut-être » en accordéon. */
+.card-side{flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:6px;text-align:right;}
 .tag{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:4px 10px;border-radius:20px;white-space:nowrap;}
 .tag.sm{font-size:11.5px;padding:3px 9px;}
 .tag.ghost{background:var(--bg);color:var(--muted);}
@@ -1827,10 +1830,7 @@ a{text-decoration:none;color:inherit;}
 .cd.live{color:#fff;background:#0D9488;}
 .cd.poll{color:#B45309;background:#FEF3C7;}
 .card-title{font-size:17px;font-weight:700;line-height:1.2;}
-/* Le compte se pousse à droite tant que la ligne tient ; au-delà elle
-   passe à deux lignes, ce qui reste la hauteur qu'on avait avant. */
-.card-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px 11px;margin:6px 0 0;color:var(--muted);font-size:12.5px;}
-.card-meta .count{margin-left:auto;}
+.card-meta{display:flex;flex-wrap:wrap;align-items:center;gap:4px 11px;margin:6px 0 0;color:var(--muted);font-size:12.5px;}
 .card-meta span{display:inline-flex;align-items:center;gap:5px;}
 .count{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;color:var(--ink);}
 .mine{font-size:12.5px;font-weight:600;}
