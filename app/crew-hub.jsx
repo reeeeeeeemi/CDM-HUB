@@ -140,10 +140,13 @@ function timeAgo(ms) {
   const d = Math.floor(diff / 86400000); if (d === 1) return "hier"; if (d < 7) return `il y a ${d} j`;
   return new Date(ms).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 }
+// label : sur les boutons de réponse et les groupes de la fiche.
+// short : sur la carte, où la place manque et où la couleur suffit à dire
+// qu'il s'agit de ta propre réponse.
 const RS = {
-  in:    { label: "Je viens",  short: "vient",  color: "#0D9488", icon: Check },
-  maybe: { label: "Peut-être", short: "hésite", color: "#D97706", icon: HelpCircle },
-  out:   { label: "Pas dispo", short: "absent", color: "#94A3B8", icon: X },
+  in:    { label: "Je viens",  short: "présent",   color: "#0D9488", icon: Check },
+  maybe: { label: "Peut-être", short: "peut-être", color: "#D97706", icon: HelpCircle },
+  out:   { label: "Pas dispo", short: "absent",    color: "#94A3B8", icon: X },
 };
 const LINK_KINDS = {
   tricount:  { label: "Tricount",  icon: Wallet,        color: "#1BA0A6" },
@@ -970,7 +973,7 @@ function EventCard({ ev, me, onOpen, past }) {
           {/* Ta réponse colle au compte à rebours : les deux disent quand et
               avec qui, on les lit d'un même coup d'œil. */}
           <div className="card-when">
-            {mine && <span className="mine" style={{ color: RS[mine].color }}>Toi : {RS[mine].short}</span>}
+            {mine && <span className="mine" style={{ color: RS[mine].color }}>{RS[mine].short}</span>}
             {noDate && !past ? <span className="cd poll"><CalendarClock size={12} /> Date à voter</span>
               : cd && !past && <span className={"cd" + (cd.live ? " live" : cd.soon ? " hot" : "")}>{cd.text}</span>}
           </div>
