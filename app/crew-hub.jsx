@@ -25,14 +25,16 @@ import { APP_NAME, CITIES } from "@/lib/brand";
 import { notifyNewEvent, notifyEventActivity, notifyAttendees } from "@/lib/actions/push";
 
 // ---------- config ----------
+// Couleurs assez sombres pour porter du texte : au moins 4,5:1 en étiquette
+// sur fond teinté comme sous un titre blanc.
 const CATS = {
   soiree:  { label: "Soirée",      color: "#7C3AED", emoji: "🎉" },
-  sport:   { label: "Sport",       color: "#0D9488", emoji: "⚽" },
-  resto:   { label: "Resto",       color: "#EA580C", emoji: "🍽️" },
-  picnic:  { label: "Pique-nique", color: "#65A30D", emoji: "🧺" },
+  sport:   { label: "Sport",       color: "#0F766E", emoji: "⚽" },
+  resto:   { label: "Resto",       color: "#C2410C", emoji: "🍽️" },
+  picnic:  { label: "Pique-nique", color: "#3F6212", emoji: "🧺" },
   voyage:  { label: "Voyage",      color: "#2563EB", emoji: "✈️" },
-  coinche: { label: "Coinche",     color: "#DB2777", emoji: "🃏" },
-  autre:   { label: "Autre",       color: "#64748B", emoji: "📌" },
+  coinche: { label: "Coinche",     color: "#BE185D", emoji: "🃏" },
+  autre:   { label: "Autre",       color: "#475569", emoji: "📌" },
 };
 const CITY_LIST = Object.keys(CITIES);
 // Toute ville hors liste garde une épingle en guise d'emoji.
@@ -46,8 +48,8 @@ const initials = (name) => {
 // `time` dit quelle heure a du sens pour ce mode — et donc s'il faut
 // afficher le champ. Toujours facultatif.
 const TRANSPORT = {
-  voiture: { label: "Je conduis",        icon: Car,        color: "#0D9488", driver: true, time: "depart" },
-  covoit:  { label: "Cherche une place", icon: UserPlus,   color: "#D97706", seeker: true },
+  voiture: { label: "Je conduis",        icon: Car,        color: "#0F766E", driver: true, time: "depart" },
+  covoit:  { label: "Cherche une place", icon: UserPlus,   color: "#B45309", seeker: true },
   train:   { label: "En train",          icon: TrainFront, color: "#2563EB", time: "arrivee" },
   avion:   { label: "En avion",          icon: Plane,      color: "#7C3AED", time: "arrivee" },
   autre:   { label: "Par mes moyens",    icon: Navigation, color: "#64748B" },
@@ -143,9 +145,9 @@ function timeAgo(ms) {
 // short : sur la carte, où la place manque et où la couleur suffit à dire
 // qu'il s'agit de ta propre réponse.
 const RS = {
-  in:    { label: "Je viens",  short: "Présent",   color: "#0D9488", icon: Check },
-  maybe: { label: "Peut-être", short: "Peut-être", color: "#D97706", icon: HelpCircle },
-  out:   { label: "Pas dispo", short: "Absent",    color: "#94A3B8", icon: X },
+  in:    { label: "Je viens",  short: "Présent",   color: "#0F766E", icon: Check },
+  maybe: { label: "Peut-être", short: "Peut-être", color: "#B45309", icon: HelpCircle },
+  out:   { label: "Pas dispo", short: "Absent",    color: "#64748B", icon: X },
 };
 const LINK_KINDS = {
   tricount:  { label: "Tricount",  icon: Wallet,        color: "#1BA0A6" },
@@ -282,7 +284,6 @@ function PlaceInput({ value, onChange, places, placeholder, onEnter }) {
  */
 export default function App({ me: meFromAuth = null, meName = "", onSignOut = null, notifyCity = "", onSetCity = null, initialEvent = null }) {
   const [me, setMe] = useState(meFromAuth);
-  const [tab, setTab] = useState("events");
   const [scale, setScale] = useState("big");
   // Un filtre de ville par échelle. Au quotidien, on part de la ville du
   // profil : un plan resto à Bordeaux ne concerne pas qui vit à Toulouse.
@@ -638,7 +639,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
   /* eslint-enable @typescript-eslint/no-unused-vars */
 
   // Le titre du header ramène à la liste, quel que soit l'endroit où on est.
-  const goHome = () => { closeEvent(); setTab("events"); };
+  const goHome = () => closeEvent();
 
   const pickCity = (c) => {
     setCity(c);
@@ -674,10 +675,8 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
         <>
           {/* Le header reste en place partout : liste comme fiche d'event. */}
           <Header meName={meName} onSignOut={onSignOut} onHome={goHome} notifyCity={notifyCity} onSetCity={onSetCity} />
-          {selectedEvent ? (
-            <EventDetail ev={selectedEvent} me={me} actions={actions} availability={availability} onBack={closeEvent} onEdit={() => setModal("edit")} places={places} />
-          ) : (
-            <>
+          {/* Au-dessus des deux vues : c'est sur la fiche que se font presque
+              toutes les écritures, un échec ne doit pas y passer inaperçu. */}
           {loadError && (
             <div className="load-err" role="alert">
               <AlertTriangle size={15} />
@@ -685,10 +684,11 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
               <button onClick={() => reload()}>Réessayer</button>
             </div>
           )}
-          <Tabs tab={tab} setTab={setTab} newCount={newCities.size} />
+          {selectedEvent ? (
+            <EventDetail ev={selectedEvent} me={me} actions={actions} availability={availability} onBack={closeEvent} onEdit={() => setModal("edit")} places={places} />
+          ) : (
+            <>
           <main className="wrap">
-            {tab === "events" && (
-              <>
                 <div className="seg">
                   <button className={scale === "big" ? "on" : ""} onClick={() => setScale("big")}><Sparkles size={15} /> Big events</button>
                   <button className={scale === "daily" ? "on" : ""} onClick={() => setScale("daily")}>Au quotidien</button>
@@ -702,19 +702,11 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
                   ))}
                 </div>
                 <EventsView data={filtered} me={me} onOpen={openEvent} scale={scale} />
-              </>
-            )}
-            {tab === "avail" && (
-              <Empty icon={<CalendarX size={26} />} title="À venir dans une prochaine MAJ"
-                text="Les dispos permettront de dire quand tu n'es pas là, pour que les sondages de dates en tiennent compte." />
-            )}
           </main>
-          {tab === "events" && (
-            <button className="fab" onClick={() => setModal("event")}>
-              <Plus size={22} strokeWidth={2.4} />
-              <span>{scale === "big" ? "Ajouter un big event" : "Ajouter un event quotidien"}</span>
-            </button>
-          )}
+          <button className="fab" onClick={() => setModal("event")}>
+            <Plus size={22} strokeWidth={2.4} />
+            <span>{scale === "big" ? "Ajouter un big event" : "Ajouter un event quotidien"}</span>
+          </button>
             </>
           )}
         </>
@@ -786,17 +778,6 @@ function Header({ meName, onSignOut, onHome, notifyCity, onSetCity }) {
         )}
       </div>
     </header>
-  );
-}
-
-function Tabs({ tab, setTab, newCount }) {
-  return (
-    <div className="tabs">
-      <button className={"tab" + (tab === "events" ? " on" : "")} onClick={() => setTab("events")}>
-        <CalendarDays size={16} /> Événements {newCount > 0 && <span className="dot inline" />}
-      </button>
-      <button className={"tab" + (tab === "avail" ? " on" : "")} onClick={() => setTab("avail")}><CalendarX size={16} /> Dispos</button>
-    </div>
   );
 }
 
@@ -904,7 +885,7 @@ function EventDetail({ ev, me, actions, availability, onBack, onEdit, places }) 
 
   return (
     <div className="detail">
-      <div className="detail-hero" style={{ background: `linear-gradient(135deg, ${cat.color}, ${cat.color}cc)` }}>
+      <div className="detail-hero" style={{ background: `linear-gradient(135deg, ${cat.color}, color-mix(in srgb, ${cat.color} 78%, #000))` }}>
         <div className="detail-top">
           <button className="ghost-btn light sm" onClick={onBack}><ChevronLeft size={15} /> Retour</button>
           <button className="ghost-btn light sm" onClick={share}>
@@ -975,8 +956,8 @@ function EventDetail({ ev, me, actions, availability, onBack, onEdit, places }) 
         {modOn(ev, "hosting") && <Hosting ev={ev} me={me} actions={actions} />}
         {modOn(ev, "datePoll") && <DatePoll ev={ev} me={me} isCreator={isCreator} actions={actions} availability={availability} />}
         {modOn(ev, "placePoll") && <PlacePoll ev={ev} me={me} isCreator={isCreator} actions={actions} places={places} />}
-        {modOn(ev, "todos") && <TodoList ev={ev} me={me} isCreator={isCreator} actions={actions} kind="todo" />}
-        {modOn(ev, "courses") && <TodoList ev={ev} me={me} isCreator={isCreator} actions={actions} kind="course" />}
+        {modOn(ev, "todos") && <TodoList ev={ev} me={me} actions={actions} kind="todo" />}
+        {modOn(ev, "courses") && <TodoList ev={ev} me={me} actions={actions} kind="course" />}
 
         {links.length > 0 && (
           <div className="links-box">
@@ -1108,8 +1089,9 @@ function PlacePoll({ ev, me, isCreator, actions, places }) {
               {o.url && <a className="poll-maps" href={normUrl(o.url)} target="_blank" rel="noopener noreferrer"><MapIcon size={12} /> Voir sur Maps</a>}
               {o.votes.length > 0 && <div className="pollnames">{o.votes.map(nameOf).join(", ")}</div>}
             </div>
-            {isCreator && <button className="polllock" onClick={() => actions.lockPlace(ev.id, o.id)} title="Figer ce lieu"><Lock size={14} /></button>}
-            {(isCreator || (o.by ?? o.votes[0]) === me) && <button className="tododel" title="Retirer ce lieu" onClick={() => actions.delPlace(ev.id, o.id)}><X size={15} /></button>}
+            {isCreator && <button className="polllock" aria-label="Figer ce lieu" title="Figer ce lieu"
+              onClick={() => window.confirm(`Figer « ${o.label} » ? Les présents seront prévenus.`) && actions.lockPlace(ev.id, o.id)}><Lock size={14} /></button>}
+            {(isCreator || (o.by ?? o.votes[0]) === me) && <button className="tododel" aria-label="Retirer ce lieu" title="Retirer ce lieu" onClick={() => actions.delPlace(ev.id, o.id)}><X size={15} /></button>}
           </div>
         );
       })}
@@ -1149,7 +1131,7 @@ function Hosting({ ev, me, actions }) {
       {list.length === 0 && !editing && <p className="block-hint">Dis si tu peux loger du monde, ou si tu cherches une place.</p>}
       {list.map((h) => (
         <div className="tprow" key={h.id}>
-          <span className="tp-ic" style={{ background: h.seeking ? "#D97706" : "#0D9488" }}>
+          <span className="tp-ic" style={{ background: h.seeking ? "#B45309" : "#0F766E" }}>
             {h.seeking ? <UserPlus size={16} /> : <BedDouble size={16} />}
           </span>
           <div className="tp-info">
@@ -1162,10 +1144,10 @@ function Hosting({ ev, me, actions }) {
         <div className="tp-edit">
           <div className="catpick">
             <button type="button" className={"catchip" + (!seeking ? " on" : "")}
-              style={!seeking ? { background: "#0D9488", borderColor: "#0D9488", color: "#fff" } : { color: "#0D9488", borderColor: "#0D948855" }}
+              style={!seeking ? { background: "#0F766E", borderColor: "#0F766E", color: "#fff" } : { color: "#0F766E", borderColor: "#0F766E55" }}
               onClick={() => setSeeking(false)}>Je peux héberger</button>
             <button type="button" className={"catchip" + (seeking ? " on" : "")}
-              style={seeking ? { background: "#D97706", borderColor: "#D97706", color: "#fff" } : { color: "#D97706", borderColor: "#D9770655" }}
+              style={seeking ? { background: "#B45309", borderColor: "#B45309", color: "#fff" } : { color: "#B45309", borderColor: "#B4530955" }}
               onClick={() => setSeeking(true)}>Je cherche un lit</button>
           </div>
           {!seeking && <input className="tp-seats" type="number" min="0" value={spots} placeholder="Places dispo" onChange={(e) => setSpots(e.target.value)} />}
@@ -1216,8 +1198,9 @@ function DatePoll({ ev, me, isCreator, actions, availability }) {
               {o.votes.length > 0 && <div className="pollnames">{o.votes.map(nameOf).join(", ")}</div>}
               {conf.length > 0 && <div className="pollwarn"><AlertTriangle size={12} /> Indispo : {conf.map(nameOf).join(", ")}</div>}
             </div>
-            {isCreator && <button className="polllock" onClick={() => actions.lockDate(ev.id, o.id)} title="Figer ce créneau"><Lock size={14} /></button>}
-            {(isCreator || (o.by ?? o.votes[0]) === me) && <button className="tododel" title="Retirer ce créneau" onClick={() => actions.delDate(ev.id, o.id)}><X size={15} /></button>}
+            {isCreator && <button className="polllock" aria-label="Figer ce créneau" title="Figer ce créneau"
+              onClick={() => window.confirm(`Figer ${pollRange(o.date, o.endDate)} ? Les présents seront prévenus.`) && actions.lockDate(ev.id, o.id)}><Lock size={14} /></button>}
+            {(isCreator || (o.by ?? o.votes[0]) === me) && <button className="tododel" aria-label="Retirer ce créneau" title="Retirer ce créneau" onClick={() => actions.delDate(ev.id, o.id)}><X size={15} /></button>}
           </div>
         );
       })}
@@ -1249,7 +1232,7 @@ const LIST_KINDS = {
   course: { label: "Liste de courses", icon: ShoppingCart, hint: "Ce qu'il faut acheter — chacun coche ce qu'il ramène.",             ph: "Ex. Charbon, salade, enceinte…" },
 };
 
-function TodoList({ ev, me, isCreator, actions, kind = "todo" }) {
+function TodoList({ ev, me, actions, kind = "todo" }) {
   const [text, setText] = useState("");
   const conf = LIST_KINDS[kind];
   const Icon = conf.icon;
@@ -1261,9 +1244,11 @@ function TodoList({ ev, me, isCreator, actions, kind = "todo" }) {
       {todos.length === 0 && <p className="block-hint">{conf.hint}</p>}
       {todos.map((t) => (
         <div className={"todorow" + (t.done ? " done" : "")} key={t.id}>
-          <button className="todocheck" onClick={() => actions.toggleTodo(ev.id, t.id)}>{t.done ? <CheckCircle2 size={20} /> : <Circle size={20} />}</button>
+          <button className="todocheck" aria-label={t.done ? "Décocher" : "Cocher"} onClick={() => actions.toggleTodo(ev.id, t.id)}>{t.done ? <CheckCircle2 size={20} /> : <Circle size={20} />}</button>
           <div className="todotext"><span>{t.text}</span><small>{t.done ? `pris par ${nameOf(t.doneBy)}` : `ajouté par ${nameOf(t.by)}`}</small></div>
-          {(t.by === me || isCreator) && <button className="tododel" onClick={() => actions.delTodo(ev.id, t.id)}><X size={15} /></button>}
+          {/* Seul l'auteur : la base refuse la suppression au créateur de l'event,
+              la croix lui promettait un geste qui revenait au rechargement. */}
+          {t.by === me && <button className="tododel" aria-label="Retirer" onClick={() => actions.delTodo(ev.id, t.id)}><X size={15} /></button>}
         </div>
       ))}
       <div className="addrow">
@@ -1285,9 +1270,9 @@ function Comments({ ev, me, actions }) {
       {list.length === 0 && <p className="block-hint">Lancez la discussion sur ce plan.</p>}
       {list.map((c) => (
         <div className="cmt" key={c.id}>
-          <span className="cmt-av">{c.by.slice(0, 2).toUpperCase()}</span>
+          <span className="cmt-av">{initials(nameOf(c.by))}</span>
           <div className="cmt-body">
-            <div className="cmt-head"><b>{nameOf(c.by)}</b><span className="soft">{timeAgo(c.at)}</span>{c.by === me && <button className="cmt-del" onClick={() => actions.delComment(ev.id, c.id)}><X size={13} /></button>}</div>
+            <div className="cmt-head"><b>{nameOf(c.by)}</b><span className="soft">{timeAgo(c.at)}</span>{c.by === me && <button className="cmt-del" aria-label="Supprimer le commentaire" onClick={() => actions.delComment(ev.id, c.id)}><X size={13} /></button>}</div>
             <p>{c.text}</p>
           </div>
         </div>
@@ -1338,7 +1323,7 @@ function AvailabilityView({ availability, me, onAdd, onDel }) {
         {mine.map((a) => (
           <div className="availrow" key={a.id}>
             <div className="availrow-info"><b>{fmtRange(a.start, a.end)}</b>{a.note && <span className="soft"> · {a.note}</span>}</div>
-            <button className="tododel" onClick={() => onDel(a.id)}><X size={15} /></button>
+            <button className="tododel" aria-label="Retirer" onClick={() => onDel(a.id)}><X size={15} /></button>
           </div>
         ))}
         <div className="avail-form">
@@ -1358,7 +1343,7 @@ function AvailabilityView({ availability, me, onAdd, onDel }) {
       ) : (
         Object.entries(byPerson).map(([person, arr]) => (
           <div className="block" key={person}>
-            <div className="block-head"><span className="cmt-av">{nameOf(person).slice(0, 2).toUpperCase()}</span> {nameOf(person)}</div>
+            <div className="block-head"><span className="cmt-av">{initials(nameOf(person))}</span> {nameOf(person)}</div>
             {arr.map((a) => (<div className="availrow" key={a.id}><div className="availrow-info"><b>{fmtRange(a.start, a.end)}</b>{a.note && <span className="soft"> · {a.note}</span>}</div></div>))}
           </div>
         ))
@@ -1488,6 +1473,8 @@ function EventForm({ defScale, defCity, initial, onClose, onSave, places }) {
     mapsLabel: "", mapsUrl: "", otherLabel: "", otherUrl: "",
     modules: { ...(defScale === "big" ? MODULES_BIG : MODULES_DAILY) },
   });
+  const [start] = useState(f);
+  const dirty = JSON.stringify(f) !== JSON.stringify(start);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   /**
    * La date de début amorce celle de fin quand elle est vide ou devenue
@@ -1541,7 +1528,7 @@ function EventForm({ defScale, defCity, initial, onClose, onSave, places }) {
   };
 
   return (
-    <Modal title={editing ? "Modifier l'event" : isBig ? "Nouveau big event" : "Nouvel event quotidien"} onClose={onClose}>
+    <Modal title={editing ? "Modifier l'event" : isBig ? "Nouveau big event" : "Nouvel event quotidien"} onClose={onClose} dirty={dirty}>
       <Field group label="Nature de l'event"><ScaleSeg value={f.scale} onChange={switchScale} /></Field>
       <Field label="Ça s'appelle comment ?"><input value={f.title} onChange={set("title")} autoFocus={!editing} placeholder={isBig ? "Ex. Nouvel An à Rome" : "Ex. Apéro du jeudi"} /></Field>
       <Field group label="Ville"><CityPicker value={f.city} onChange={(c) => setF({ ...f, city: c })} /></Field>
@@ -1629,11 +1616,28 @@ function EventForm({ defScale, defCity, initial, onClose, onSave, places }) {
 
 
 // ---------- shared UI ----------
-function Modal({ title, children, onClose }) {
+/**
+ * `dirty` : un formulaire entamé ne se jette pas sur un toucher à côté. La
+ * croix, elle, reste un geste voulu et ferme sans demander.
+ */
+function Modal({ title, children, onClose, dirty = false }) {
+  const dismiss = () => {
+    if (!dirty || window.confirm("Abandonner ce que tu as saisi ?")) onClose();
+  };
+  const dismissRef = useRef(dismiss);
+  useEffect(() => { dismissRef.current = dismiss; });
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") dismissRef.current(); };
+    window.addEventListener("keydown", onKey);
+    // La page derrière ne défile plus sous le doigt pendant qu'on remplit.
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { window.removeEventListener("keydown", onKey); document.body.style.overflow = prev; };
+  }, []);
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()}>
-        <div className="sheet-head"><h2>{title}</h2><button className="x" onClick={onClose}><X size={20} /></button></div>
+    <div className="overlay" onClick={dismiss}>
+      <div className="sheet" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-head"><h2>{title}</h2><button className="x" aria-label="Fermer" onClick={onClose}><X size={20} /></button></div>
         <div className="sheet-body">{children}</div>
       </div>
     </div>
@@ -1644,7 +1648,6 @@ function Empty({ icon, title, text }) { return <div className="empty"><div class
 
 // ---------- styles ----------
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Inter:wght@400;500;600&display=swap');
 .root{--bg:#F4F2ED;--card:#FFFFFF;--ink:#211D2B;--muted:#726C7E;--line:#E6E2D8;--accent:#B4451F;--accent-soft:#FBEBE4;
   font-family:'Inter',system-ui,sans-serif;color:var(--ink);background:var(--bg);min-height:100vh;min-height:100dvh;max-width:560px;margin:0 auto;position:relative;overflow-x:clip;-webkit-font-smoothing:antialiased;}
 *{box-sizing:border-box;}
@@ -1694,14 +1697,11 @@ a{text-decoration:none;color:inherit;}
   font-family:inherit;font-weight:600;font-size:14px;color:var(--muted);}
 .hd-menu-out button:hover{background:#EDEAE3;color:var(--ink);}
 
-.tabs{display:flex;gap:6px;padding:0 18px 4px;}
 .load-err{display:flex;align-items:center;gap:9px;margin:0 18px 10px;padding:11px 13px;border-radius:12px;
   background:#FDECEC;color:#B91C1C;font-size:13px;font-weight:600;line-height:1.4;}
 .load-err span{flex:1;min-width:0;}
 .load-err button{flex-shrink:0;padding:6px 11px;border-radius:9px;background:#B91C1C;color:#fff;
   font-family:inherit;font-weight:600;font-size:12.5px;}
-.tab{display:flex;align-items:center;gap:6px;padding:9px 13px;border-radius:12px;font-weight:600;font-size:13.5px;color:var(--muted);transition:.15s;white-space:nowrap;}
-.tab.on{background:var(--ink);color:#fff;}
 .pill{background:var(--accent);color:#fff;font-size:11px;font-weight:700;padding:1px 7px;border-radius:10px;}
 
 .seg{display:flex;background:#E9E5DC;border-radius:13px;padding:4px;gap:4px;margin-bottom:12px;}
@@ -1711,15 +1711,15 @@ a{text-decoration:none;color:inherit;}
 
 .cities{display:flex;gap:7px;overflow-x:auto;padding:0 18px 14px;margin:0 -18px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
 .cities::-webkit-scrollbar{display:none;}
-.citychip{position:relative;flex-shrink:0;padding:7px 13px;border-radius:20px;font-weight:600;font-size:13px;color:var(--ink);background:var(--card);border:1.5px solid var(--line);transition:.12s;white-space:nowrap;}
+.citychip{position:relative;flex-shrink:0;padding:10px 14px;border-radius:20px;font-weight:600;font-size:13px;color:var(--ink);background:var(--card);border:1.5px solid var(--line);transition:.12s;white-space:nowrap;}
 .citychip.on{background:var(--ink);color:#fff;border-color:var(--ink);}
 .dot{position:absolute;top:-3px;right:-3px;width:11px;height:11px;background:#EF4444;border-radius:50%;border:2.5px solid var(--bg);}
-.dot.inline{position:static;display:inline-block;width:8px;height:8px;border:none;margin-left:1px;}
 
 .card{display:flex;width:100%;text-align:left;background:var(--card);border-radius:16px;margin-bottom:9px;overflow:hidden;border:1px solid var(--line);transition:transform .12s,box-shadow .12s;}
 .card:hover{transform:translateY(-2px);box-shadow:0 10px 26px -14px rgba(33,29,43,.4);}
 .card:active{transform:translateY(0);}
-.card.past{opacity:.66;}
+/* Pas d'opacité : elle faisait passer tout le texte sous le seuil de lecture. */
+.card.past{filter:grayscale(.7);box-shadow:none;}
 .card-stripe{width:6px;background:var(--cat);flex-shrink:0;}
 /* stretch : la colonne de droite occupe toute la hauteur de la carte,
    condition pour que le compteur puisse être poussé tout en bas. */
@@ -1738,10 +1738,10 @@ a{text-decoration:none;color:inherit;}
 .tag{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:4px 10px;border-radius:20px;white-space:nowrap;}
 .tag.sm{font-size:11.5px;padding:3px 9px;}
 .tag.ghost{background:var(--bg);color:var(--muted);}
-.tag.light{background:rgba(255,255,255,.22);color:#fff;}
+.tag.light{background:rgba(0,0,0,.18);color:#fff;}
 .cd{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;font-weight:700;color:var(--accent);background:var(--accent-soft);padding:3px 9px;border-radius:8px;font-family:'Bricolage Grotesque';}
-.cd.hot{color:#fff;background:#DB2777;}
-.cd.live{color:#fff;background:#0D9488;}
+.cd.hot{color:#fff;background:#BE185D;}
+.cd.live{color:#fff;background:#0F766E;}
 .cd.poll{color:#B45309;background:#FEF3C7;}
 .card-title{font-size:17px;font-weight:700;line-height:1.2;}
 /* Une ligne chacune, toujours : la date et la ville se retrouvaient côte
@@ -1770,7 +1770,7 @@ a{text-decoration:none;color:inherit;}
 .detail-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
 .ghost-btn{display:inline-flex;align-items:center;gap:4px;font-weight:600;font-size:14px;padding:7px 12px 7px 8px;border-radius:10px;color:var(--muted);}
 /* sm : dans le bandeau, ces boutons sont des raccourcis, pas le sujet. */
-.ghost-btn.sm{gap:5px;font-size:12.5px;padding:5px 10px;border-radius:9px;}
+.ghost-btn.sm{gap:5px;font-size:12.5px;padding:9px 12px;border-radius:10px;min-height:36px;}
 .ghost-btn.light{background:rgba(255,255,255,.18);color:#fff;}
 .ghost-btn.danger{color:#DC2626;}
 .detail-title{font-size:29px;font-weight:800;line-height:1.05;}
@@ -1832,12 +1832,12 @@ a{text-decoration:none;color:inherit;}
 .btn-soft{background:var(--accent-soft);color:var(--accent);font-weight:600;font-size:14px;padding:10px 16px;border-radius:12px;}
 
 .pollrow{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);}
-.pollvote{display:flex;align-items:center;gap:5px;flex-shrink:0;padding:7px 11px;border:2px solid var(--line);border-radius:11px;font-weight:700;font-size:13px;color:var(--muted);transition:.12s;}
+.pollvote{display:flex;align-items:center;gap:5px;flex-shrink:0;padding:10px 12px;border:2px solid var(--line);border-radius:11px;font-weight:700;font-size:13px;color:var(--muted);transition:.12s;}
 .pollvote.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);}
 .pollinfo{flex:1;min-width:0;font-size:14px;text-transform:capitalize;padding-top:3px;}
 .pollnames{color:var(--muted);font-size:12px;text-transform:none;margin-top:2px;}
-.pollwarn{display:flex;align-items:center;gap:4px;color:#D97706;font-size:12px;text-transform:none;margin-top:3px;font-weight:600;}
-.polllock{flex-shrink:0;width:34px;height:34px;border-radius:10px;background:var(--bg);color:var(--muted);display:flex;align-items:center;justify-content:center;border:1px solid var(--line);}
+.pollwarn{display:flex;align-items:center;gap:4px;color:#B45309;font-size:12px;text-transform:none;margin-top:3px;font-weight:600;}
+.polllock{flex-shrink:0;width:40px;height:40px;margin-left:4px;border-radius:10px;background:var(--bg);color:var(--muted);display:flex;align-items:center;justify-content:center;border:1px solid var(--line);}
 .polladd{display:flex;align-items:flex-end;gap:8px;margin-top:12px;}
 .polladd-f{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px;}
 .polladd-f span{font-size:12px;font-weight:600;color:var(--muted);}
@@ -1875,13 +1875,13 @@ a{text-decoration:none;color:inherit;}
 .polladd-btn:disabled{opacity:.4;}
 
 .todorow{display:flex;align-items:center;gap:11px;padding:9px 0;border-bottom:1px solid var(--line);}
-.todocheck{color:var(--muted);display:flex;flex-shrink:0;}
-.todorow.done .todocheck{color:#0D9488;}
+.todocheck{color:var(--muted);display:flex;flex-shrink:0;padding:10px;margin:-10px;}
+.todorow.done .todocheck{color:#0F766E;}
 .todotext{flex:1;min-width:0;}
 .todotext span{font-size:14.5px;display:block;}
 .todorow.done .todotext span{text-decoration:line-through;color:var(--muted);}
 .todotext small{color:var(--muted);font-size:11.5px;}
-.tododel{flex-shrink:0;color:var(--muted);width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:8px;}
+.tododel{flex-shrink:0;color:var(--muted);width:40px;height:40px;margin-left:4px;display:flex;align-items:center;justify-content:center;border-radius:8px;}
 
 .addrow{display:flex;gap:8px;margin-top:12px;}
 .addrow input{flex:1;min-width:0;padding:11px 13px;border:2px solid var(--line);border-radius:12px;font-size:16px;background:var(--bg);outline:none;font-family:inherit;}
@@ -1895,7 +1895,7 @@ a{text-decoration:none;color:inherit;}
 .cmt-head{display:flex;align-items:center;gap:8px;margin-bottom:2px;}
 .cmt-head b{font-size:13.5px;}
 .cmt-head .soft{font-size:11.5px;}
-.cmt-del{margin-left:auto;color:var(--muted);display:flex;}
+.cmt-del{margin:-10px -10px -10px auto;padding:10px;color:var(--muted);display:flex;}
 .cmt-body p{font-size:14px;line-height:1.45;color:#443E52;word-break:break-word;}
 
 .modrow{margin:22px 0 6px;padding:14px;border:1.5px dashed var(--line);border-radius:16px;background:#FBFAF7;}
@@ -1947,7 +1947,7 @@ a{text-decoration:none;color:inherit;}
 @keyframes up{from{transform:translateY(30px);}}
 .sheet-head{display:flex;justify-content:space-between;align-items:center;padding:20px 20px 6px;position:sticky;top:0;background:var(--bg);z-index:2;}
 .sheet-head h2{font-size:22px;font-weight:800;}
-.x{width:36px;height:36px;border-radius:50%;background:var(--card);display:flex;align-items:center;justify-content:center;color:var(--muted);border:1px solid var(--line);}
+.x{width:44px;height:44px;border-radius:50%;background:var(--card);display:flex;align-items:center;justify-content:center;color:var(--muted);border:1px solid var(--line);}
 .sheet-body{padding:12px 20px calc(30px + env(safe-area-inset-bottom));min-width:0;}
 .field{display:block;margin-bottom:16px;}
 .field>span{display:block;font-weight:600;font-size:13.5px;margin-bottom:7px;}
@@ -1976,7 +1976,7 @@ a{text-decoration:none;color:inherit;}
 .field input,.field textarea{min-width:0;max-width:100%;}
 .clearable{display:flex;flex-direction:column;align-items:flex-start;gap:6px;}
 .clearable input{width:100%;}
-.clearbtn{display:inline-flex;align-items:center;gap:4px;padding:5px 9px;border-radius:8px;
+.clearbtn{display:inline-flex;align-items:center;gap:4px;padding:9px 10px;border-radius:8px;
   background:var(--bg);color:var(--muted);font-family:inherit;font-size:12.5px;font-weight:600;}
 .clearbtn:active,.clearbtn:hover{background:#EDEAE3;color:var(--ink);}
 .preview{border:2px dashed var(--line);border-radius:16px;padding:14px;margin-bottom:16px;background:var(--bg);}
