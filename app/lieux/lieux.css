@@ -10,6 +10,7 @@
 .lx-cities::-webkit-scrollbar{display:none;}
 .lx-cities.form{flex-wrap:wrap;overflow:visible;margin:0;padding:0;}
 .lx-city{flex-shrink:0;padding:10px 14px;border-radius:20px;border:1.5px solid var(--line);background:var(--card);font-weight:600;font-size:13px;color:var(--ink);white-space:nowrap;}
+.lx-other{margin-top:8px;}
 .lx-city.on{background:var(--ink);border-color:var(--ink);color:#fff;}
 .lx-add{display:flex;align-items:center;justify-content:center;gap:7px;width:100%;min-height:46px;margin-bottom:18px;
   border-radius:13px;border:1.5px dashed var(--accent);background:var(--accent-soft);color:var(--accent);font-weight:700;font-size:14px;}
@@ -36,8 +37,13 @@
 .lx-code span{font-size:13px;color:var(--muted);}
 .lx-code b{font-family:'Bricolage Grotesque',system-ui,sans-serif;font-size:21px;letter-spacing:.06em;}
 .lx-code button{margin-left:auto;display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);}
-/* Un mot de passe wifi est long : plus petit que le code, et il se coupe. */
-.lx-code.wifi b{font-family:inherit;font-size:15px;letter-spacing:0;word-break:break-all;}
+.lx-wifi{display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:12px;background:var(--bg);}
+.lx-wifi>svg{color:var(--accent);flex-shrink:0;}
+.lx-wifi div{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;}
+.lx-wifi span{font-size:13px;color:var(--muted);}
+/* Un mot de passe wifi est long : il se coupe plutôt que de déborder. */
+.lx-wifi b{color:var(--ink);font-size:14.5px;margin-left:4px;word-break:break-all;}
+.lx-wifi button{display:flex;align-items:center;justify-content:center;width:40px;height:40px;flex-shrink:0;border-radius:10px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);}
 .lx-line{display:flex;align-items:flex-start;gap:9px;font-size:14px;line-height:1.4;}
 .lx-line svg{flex-shrink:0;margin-top:1px;color:var(--muted);}
 .lx-go{display:flex;align-items:center;justify-content:center;gap:7px;min-height:44px;border-radius:12px;background:var(--accent);color:#fff;font-weight:700;font-size:14px;text-decoration:none;}

@@ -21,13 +21,13 @@ export default async function Page() {
   // tiennent : on prévient avant d'en supprimer un qui sert encore.
   const today = new Date().toISOString().slice(0, 10);
   const [{ data: placeRows }, { data: used }] = await Promise.all([
-    supabase.from("places").select("id, owner_id, name, address, door_code, access, wifi, city, profiles ( pseudo )").order("name"),
+    supabase.from("places").select("id, owner_id, name, address, door_code, access, wifi_name, wifi_password, city, profiles ( pseudo )").order("name"),
     supabase.from("events").select("place_id").not("place_id", "is", null).or(`starts_on.is.null,starts_on.gte.${today}`),
   ]);
 
   type PlaceRow = {
     id: string; owner_id: string; name: string; address: string | null;
-    door_code: string | null; access: string | null; wifi: string | null; city: string | null; profiles: { pseudo: string } | null;
+    door_code: string | null; access: string | null; wifi_name: string | null; wifi_password: string | null; city: string | null; profiles: { pseudo: string } | null;
   };
   const upcoming: Record<string, number> = {};
   for (const e of (used ?? []) as { place_id: string }[]) upcoming[e.place_id] = (upcoming[e.place_id] ?? 0) + 1;
@@ -40,7 +40,8 @@ export default async function Page() {
     address: p.address ?? "",
     doorCode: p.door_code ?? "",
     access: p.access ?? "",
-    wifi: p.wifi ?? "",
+    wifiName: p.wifi_name ?? "",
+    wifiPassword: p.wifi_password ?? "",
     city: p.city ?? "",
     upcoming: upcoming[p.id] ?? 0,
   }));

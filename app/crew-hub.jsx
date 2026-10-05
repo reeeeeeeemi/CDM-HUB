@@ -981,12 +981,16 @@ function EventDetail({ ev, me, members, actions, availability, onBack, onEdit, p
         {ev.place && <div className="info-row"><MapPin size={18} /><div><b>{ev.place}</b></div></div>}
         {/* Un lieu du carnet : on lit ses infos à la source, toujours à jour
             si son propriétaire change le code. */}
-        {home && (home.address || home.doorCode || home.access || home.wifi) && (
+        {home && (home.address || home.doorCode || home.access || home.wifiName || home.wifiPassword) && (
           <div className="home-info">
             {home.address && <a href={mapsSearch(home.address)} target="_blank" rel="noopener noreferrer"><MapIcon size={14} /> {home.address}</a>}
             {home.doorCode && <span><KeyRound size={14} /> Code : <b>{home.doorCode}</b></span>}
             {home.access && <span><Building size={14} /> {home.access}</span>}
-            {home.wifi && <span className="home-wifi"><Wifi size={14} /> Wifi : <b>{home.wifi}</b></span>}
+            {(home.wifiName || home.wifiPassword) && (
+              <span className="home-wifi"><Wifi size={14} />
+                <span>{home.wifiName && <>{home.wifiName}</>}{home.wifiName && home.wifiPassword && " · "}{home.wifiPassword && <>mdp <b>{home.wifiPassword}</b></>}</span>
+              </span>
+            )}
           </div>
         )}
 
@@ -2041,7 +2045,7 @@ a{text-decoration:none;color:inherit;}
 .home-info a,.home-info span{display:flex;align-items:center;gap:8px;color:var(--ink);}
 .home-info a{text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px;}
 .home-info svg{flex-shrink:0;color:var(--muted);}
-.home-wifi b{word-break:break-all;}
+.home-wifi>span{min-width:0;word-break:break-all;}
 .poll-home{color:var(--accent);vertical-align:-2px;margin-right:5px;}
 .bday{display:flex;align-items:center;gap:9px;margin-bottom:12px;padding:12px 14px;border-radius:14px;background:var(--accent-soft);color:var(--ink);font-size:14px;}
 .bday svg{flex-shrink:0;color:var(--accent);}

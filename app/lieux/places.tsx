@@ -7,7 +7,7 @@ import {
   ChevronLeft, ChevronDown, Search, MapPin, KeyRound, Building, Pencil, Trash2, Plus, Copy, Navigation, X, Wifi,
 } from "lucide-react";
 
-type PlaceFields = { name: string; address: string; doorCode: string; access: string; wifi: string; city: string };
+type PlaceFields = { name: string; address: string; doorCode: string; access: string; wifiName: string; wifiPassword: string; city: string };
 type Place = PlaceFields & { id: string; ownerId: string; owner: string; upcoming: number };
 
 type Props = {
@@ -17,7 +17,7 @@ type Props = {
   onDelete: (id: string) => Promise<{ error?: string }>;
 };
 
-const EMPTY: PlaceFields = { name: "", address: "", doorCode: "", access: "", wifi: "", city: "" };
+const EMPTY: PlaceFields = { name: "", address: "", doorCode: "", access: "", wifiName: "", wifiPassword: "", city: "" };
 const mapsUrl = (address: string) =>
   `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
 // Sans accents ni majuscules : « Bezier » trouve « Béziers ».
@@ -74,7 +74,7 @@ export default function Places({ viewer, places, onSave, onDelete }: Props) {
   const startEdit = (p: Place | null) => {
     setEditing(p ? p.id : "new");
     // Un nouveau lieu prend la ville affichée, à défaut la sienne.
-    setDraft(p ? { name: p.name, address: p.address, doorCode: p.doorCode, access: p.access, wifi: p.wifi, city: p.city } : { ...EMPTY, city: city !== "all" ? city : viewer.city });
+    setDraft(p ? { name: p.name, address: p.address, doorCode: p.doorCode, access: p.access, wifiName: p.wifiName, wifiPassword: p.wifiPassword, city: p.city } : { ...EMPTY, city: city !== "all" ? city : viewer.city });
   };
 
   const save = async () => {
@@ -83,8 +83,8 @@ export default function Places({ viewer, places, onSave, onDelete }: Props) {
     if (r?.error || !r.id) { setErr(r?.error || "Impossible d'enregistrer."); return; }
     const clean = {
       name: draft.name.trim(), address: draft.address.trim(),
-      doorCode: draft.doorCode.trim(), access: draft.access.trim(), wifi: draft.wifi.trim(),
-      city: draft.city,
+      doorCode: draft.doorCode.trim(), access: draft.access.trim(), wifiName: draft.wifiName.trim(), wifiPassword: draft.wifiPassword.trim(),
+      city: draft.city.trim(),
     };
     setList((prev) => id
       ? prev.map((p) => (p.id === id ? { ...p, ...clean } : p))
@@ -190,12 +190,16 @@ export default function Places({ viewer, places, onSave, onDelete }: Props) {
                         <button type="button" aria-label="Copier le code" onClick={() => copy(p.doorCode, "Code")}><Copy size={15} /></button>
                       </div>
                     )}
-                    {p.wifi && (
-                      <div className="lx-code wifi">
+                    {(p.wifiName || p.wifiPassword) && (
+                      <div className="lx-wifi">
                         <Wifi size={15} />
-                        <span>Wifi</span>
-                        <b>{p.wifi}</b>
-                        <button type="button" aria-label="Copier le wifi" onClick={() => copy(p.wifi, "Wifi")}><Copy size={15} /></button>
+                        <div>
+                          {p.wifiName && <span>Box <b>{p.wifiName}</b></span>}
+                          {p.wifiPassword && <span>Mot de passe <b>{p.wifiPassword}</b></span>}
+                        </div>
+                        {p.wifiPassword && (
+                          <button type="button" aria-label="Copier le mot de passe" onClick={() => copy(p.wifiPassword, "Mot de passe")}><Copy size={15} /></button>
+                        )}
                       </div>
                     )}
                     {p.access && <div className="lx-line"><Building size={15} /> {p.access}</div>}
@@ -207,7 +211,7 @@ export default function Places({ viewer, places, onSave, onDelete }: Props) {
                         </a>
                       </>
                     )}
-                    {!p.doorCode && !p.access && !p.address && !p.wifi && <p className="rg-hint">Aucune info pour l&apos;instant.</p>}
+                    {!p.doorCode && !p.access && !p.address && !p.wifiName && !p.wifiPassword && <p className="rg-hint">Aucune info pour l&apos;instant.</p>}
                     {p.ownerId === viewer.id && (
                       <div className="lx-acts">
                         <button onClick={() => startEdit(p)}><Pencil size={14} /> Modifier</button>
@@ -233,6 +237,8 @@ function PlaceForm({ draft, setDraft, onSave, onCancel }: {
 }) {
   const set = (k: keyof PlaceFields) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setDraft({ ...draft, [k]: e.target.value });
+  // Une ville hors de la liste du groupe se tape à la main.
+  const [other, setOther] = useState(Boolean(draft.city && !CITIES[draft.city]));
   return (
     <div className="lx-form">
       <label className="rg-field"><span>Nom</span>
@@ -241,10 +247,15 @@ function PlaceForm({ draft, setDraft, onSave, onCancel }: {
       <div className="rg-field"><span>Ville</span>
         <div className="lx-cities form">
           {Object.keys(CITIES).map((c) => (
-            <button key={c} type="button" className={"lx-city" + (draft.city === c ? " on" : "")}
-              onClick={() => setDraft({ ...draft, city: draft.city === c ? "" : c })}>{CITIES[c]} {c}</button>
+            <button key={c} type="button" className={"lx-city" + (!other && draft.city === c ? " on" : "")}
+              onClick={() => { setOther(false); setDraft({ ...draft, city: draft.city === c ? "" : c }); }}>{CITIES[c]} {c}</button>
           ))}
+          <button type="button" className={"lx-city" + (other ? " on" : "")}
+            onClick={() => { setOther(!other); setDraft({ ...draft, city: "" }); }}>📍 Autre</button>
         </div>
+        {other && (
+          <input className="lx-other" value={draft.city} onChange={set("city")} placeholder="Ex. Arcachon, Lyon…" autoFocus />
+        )}
       </div>
       <label className="rg-field"><span>Adresse</span>
         <input value={draft.address} onChange={set("address")} placeholder="12 rue des Lilas, 33000 Bordeaux" />
@@ -257,9 +268,14 @@ function PlaceForm({ draft, setDraft, onSave, onCancel }: {
           <input value={draft.access} onChange={set("access")} placeholder="3e, « Dupont »" />
         </label>
       </div>
-      <label className="rg-field"><span>Wifi</span>
-        <input value={draft.wifi} onChange={set("wifi")} placeholder="Livebox-12AB / motdepasse" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
-      </label>
+      <div className="lx-row2">
+        <label className="rg-field"><span>Nom de la box</span>
+          <input value={draft.wifiName} onChange={set("wifiName")} placeholder="Livebox-12AB" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
+        </label>
+        <label className="rg-field"><span>Mot de passe wifi</span>
+          <input value={draft.wifiPassword} onChange={set("wifiPassword")} placeholder="••••••••" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
+        </label>
+      </div>
       <div className="lx-acts">
         <button onClick={onCancel}>Annuler</button>
         <button className="primary" onClick={onSave} disabled={!draft.name.trim()}>Enregistrer</button>
