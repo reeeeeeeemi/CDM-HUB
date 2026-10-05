@@ -339,6 +339,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
   const [newCities, setNewCities] = useState(new Set());
 
   const [loadError, setLoadError] = useState("");
+  const [news, setNews] = useState(false);
 
   /**
    * Ouvrir un event change l'URL sans recharger la page. pushState est
@@ -388,10 +389,24 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
     }
   }, []);
 
+  const closeNews = useCallback(() => {
+    setNews(false);
+    try { window.localStorage.setItem("cdm:news", String(NEWS_VERSION)); } catch {}
+  }, []);
+
   useEffect(() => {
     (async () => {
       if (meFromAuth) setMe(meFromAuth);
+      // Lu avant que cdm:lastSeen soit réécrit plus bas : sans visite
+      // précédente, on arrive tout juste et rien n'est « nouveau ».
+      let returning = false, seenNews = 0;
+      try {
+        returning = Boolean(window.localStorage.getItem("cdm:lastSeen"));
+        seenNews = Number(window.localStorage.getItem("cdm:news") || 0);
+        if (!returning) window.localStorage.setItem("cdm:news", String(NEWS_VERSION));
+      } catch {}
       const evs = await reload();
+      if (returning && seenNews < NEWS_VERSION) setNews(true);
       // Signale les villes où un plan est apparu depuis la dernière visite.
       // lastSeen reste local : c'est une préférence d'affichage, pas une donnée
       // du groupe.
@@ -766,6 +781,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
         </>
       )}
       {modal === "event" && <EventForm defScale={scale} defCity={city !== "all" ? city : ""} onClose={closeModal} onSave={addEvent} places={places} savedPlaces={savedPlaces} />}
+      {news && !modal && !loading && <WhatsNew onClose={closeNews} />}
       {modal === "edit" && selectedEvent && <EventForm initial={selectedEvent} onClose={closeModal} onSave={(e) => editEvent(selectedEvent.id, e)} places={places} savedPlaces={savedPlaces} />}
     </div>
   );
@@ -1089,6 +1105,32 @@ function CopyBtn({ text, label }) {
     <button type="button" className={"copy-btn" + (done ? " done" : "")} aria-label={label} onClick={copy}>
       {done ? <Check size={14} /> : <Copy size={14} />}
     </button>
+  );
+}
+
+// ---------- quoi de neuf ----------
+// À chaque nouveau lot : réécrire la liste et augmenter NEWS_VERSION. La
+// fenêtre s'ouvre une fois par téléphone, pour qui avait déjà l'app.
+const NEWS_VERSION = 1;
+const NEWS = [
+  ["🎂", "Anniversaires", "mets ton anniv dans Réglages, le groupe sera prévenu le jour J"],
+  ["🏠", "Nos lieux", "adresse, code, wifi de chez chacun, dans le menu en haut à droite"],
+  ["🔔", "Relance", "le créateur d'un event peut relancer ceux qui n'ont pas répondu"],
+  ["✏️", "Modifier un event", "après l'avoir créé"],
+  ["🚗", "Trajets", "précise le jour et l'heure de ton départ"],
+  ["✨", "Et aussi", "formulaire plus court, Réglages plus clairs, appli plus rapide"],
+];
+
+function WhatsNew({ onClose }) {
+  return (
+    <Modal title="Quoi de neuf 🎉" onClose={onClose}>
+      <ul className="news">
+        {NEWS.map(([icon, title, text]) => (
+          <li key={title}><span className="news-ic">{icon}</span><span><b>{title}</b> : {text}</span></li>
+        ))}
+      </ul>
+      <button className="btn-primary big" onClick={onClose}>Compris !</button>
+    </Modal>
   );
 }
 
@@ -2073,6 +2115,9 @@ a{text-decoration:none;color:inherit;}
 .copy-btn.done{border-color:#0F766E;color:#0F766E;}
 .home-info .copy-btn svg{color:inherit;}
 .poll-home{color:var(--accent);vertical-align:-2px;margin-right:5px;}
+.news{list-style:none;margin:0 0 18px;padding:0;display:flex;flex-direction:column;gap:12px;}
+.news li{display:flex;gap:11px;align-items:flex-start;font-size:14.5px;line-height:1.45;}
+.news-ic{flex-shrink:0;width:34px;height:34px;border-radius:10px;background:var(--card);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:17px;}
 .bday{display:flex;align-items:center;gap:9px;margin-bottom:12px;padding:12px 14px;border-radius:14px;background:var(--accent-soft);color:var(--ink);font-size:14px;}
 .bday svg{flex-shrink:0;color:var(--accent);}
 .ac-item:hover{background:var(--bg);color:var(--accent);}
