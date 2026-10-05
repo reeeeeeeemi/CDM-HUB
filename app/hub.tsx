@@ -33,19 +33,22 @@ export async function readViewer(): Promise<Viewer | null> {
 
   if (!user) return null;
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("pseudo, city, notify_big, notify_city, notify_mine")
-    .eq("id", user.id)
-    .single();
-
-  // Le RLS ne renvoie cette table qu'aux membres : zéro ligne signifie que le
-  // compte existe mais n'a pas encore été invité dans le groupe.
-  const { data: membership } = await supabase
-    .from("members")
-    .select("user_id")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  // En parallèle : les deux lectures ne dépendent que de l'identifiant, et
+  // chaque aller-retour vers la base se paie à chaque ouverture de page.
+  const [{ data: profile }, { data: membership }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("pseudo, city, notify_big, notify_city, notify_mine")
+      .eq("id", user.id)
+      .single(),
+    // Le RLS ne renvoie cette table qu'aux membres : zéro ligne signifie que
+    // le compte existe mais n'a pas encore été invité dans le groupe.
+    supabase
+      .from("members")
+      .select("user_id")
+      .eq("user_id", user.id)
+      .maybeSingle(),
+  ]);
 
   return {
     id: user.id,

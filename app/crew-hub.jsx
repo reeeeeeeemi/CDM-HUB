@@ -325,14 +325,17 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
   const [cityDaily, setCityDaily] = useState(notifyCity || "all");
   const city = scale === "big" ? cityBig : cityDaily;
   const setCity = scale === "big" ? setCityBig : setCityDaily;
-  const [events, setEvents] = useState([]);
-  const [availability, setAvailability] = useState([]);
-  const [members, setMembers] = useState([]);
-  const [savedPlaces, setSavedPlaces] = useState([]);
+  // Au retour sur le hub, on repart du dernier chargement : l'écran est là
+  // tout de suite, et reload() le rafraîchit derrière.
+  const [cached] = useState(db.cachedHub);
+  const [events, setEvents] = useState(cached?.events || []);
+  const [availability, setAvailability] = useState(cached?.availability || []);
+  const [members, setMembers] = useState(cached?.members || []);
+  const [savedPlaces, setSavedPlaces] = useState(cached?.places || []);
   // Renseigné quand on arrive par un lien partagé ou une notification.
   const [selected, setSelected] = useState(initialEvent || null);
   const [modal, setModal] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!cached);
   const [newCities, setNewCities] = useState(new Set());
 
   const [loadError, setLoadError] = useState("");
