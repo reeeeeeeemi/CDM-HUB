@@ -1464,10 +1464,13 @@ function formFromEvent(ev) {
   };
 }
 
+// Un big event est le plus souvent un voyage, un plan du quotidien une soirée.
+const defCat = (scale) => (scale === "big" ? "voyage" : "soiree");
+
 function EventForm({ defScale, defCity, initial, onClose, onSave, places }) {
   const editing = Boolean(initial);
   const [f, setF] = useState(() => initial ? formFromEvent(initial) : {
-    title: "", category: "soiree", scale: defScale || "big", city: defCity || "",
+    title: "", category: defCat(defScale || "big"), scale: defScale || "big", city: defCity || "",
     date: "", endDate: "", time: "", endTime: "", place: "", description: "",
     usePoll: false, tricount: "", messenger: "", airbnb: "",
     mapsLabel: "", mapsUrl: "", otherLabel: "", otherUrl: "",
@@ -1475,6 +1478,19 @@ function EventForm({ defScale, defCity, initial, onClose, onSave, places }) {
   });
   const [start] = useState(f);
   const dirty = JSON.stringify(f) !== JSON.stringify(start);
+  const isBig = f.scale === "big";
+
+  // Le reste du formulaire se replie : titre, ville, date, lieu et détails suffisent
+  // à lancer la plupart des plans. Le résumé dit ce qui est déjà rempli,
+  // pour qu'un réglage replié ne passe pas inaperçu.
+  const sectionCount = MODULE_LABELS.filter(([k]) => k === "datePoll" ? (f.usePoll || f.modules[k]) : f.modules[k]).length;
+  const linkCount = [f.mapsUrl, f.tricount, f.messenger, f.airbnb, f.otherUrl].filter((v) => v.trim()).length;
+  const extras = [
+    sectionCount && `${sectionCount} section${sectionCount > 1 ? "s" : ""}`,
+    linkCount && `${linkCount} lien${linkCount > 1 ? "s" : ""}`,
+  ].filter(Boolean);
+  // En modification, on ouvre d'office si quelque chose y est déjà rempli.
+  const [more, setMore] = useState(() => editing && (Object.values(initial.modules || {}).some(Boolean) || (initial.links || []).length > 0));
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   /**
    * La date de début amorce celle de fin quand elle est vide ou devenue
@@ -1491,7 +1507,6 @@ function EventForm({ defScale, defCity, initial, onClose, onSave, places }) {
     }));
   };
   const clear = (k) => () => setF({ ...f, [k]: "" });
-  const isBig = f.scale === "big";
 
   // Une fin antérieure au début est refusée explicitement, plutôt que
   // silencieusement ignorée comme avant.
@@ -1504,18 +1519,16 @@ function EventForm({ defScale, defCity, initial, onClose, onSave, places }) {
   const invalid = Boolean(dateError);
 
   // quand on change de type, on réaligne les sections par défaut de ce type
-  const switchScale = (s) => setF({ ...f, scale: s, modules: { ...(s === "big" ? MODULES_BIG : MODULES_DAILY), datePoll: f.usePoll || (s === "big" ? MODULES_BIG : MODULES_DAILY).datePoll } });
+  // La catégorie suit le type tant qu'on ne l'a pas choisie soi-même.
+  const switchScale = (s) => setF({ ...f, scale: s, category: f.category === defCat(f.scale) ? defCat(s) : f.category, modules: { ...(s === "big" ? MODULES_BIG : MODULES_DAILY), datePoll: f.usePoll || (s === "big" ? MODULES_BIG : MODULES_DAILY).datePoll } });
 
   const save = () => {
     const links = [];
-    // Maps sert sur tous les events ; le reste reste propre aux big.
     if (f.mapsUrl.trim()) links.push({ kind: "maps", label: f.mapsLabel.trim() || "Google Maps", url: f.mapsUrl.trim() });
-    if (isBig) {
-      if (f.tricount.trim()) links.push({ kind: "tricount", label: "Tricount", url: f.tricount.trim() });
-      if (f.messenger.trim()) links.push({ kind: "messenger", label: "Conv Messenger", url: f.messenger.trim() });
-      if (f.airbnb.trim()) links.push({ kind: "airbnb", label: "Airbnb", url: f.airbnb.trim() });
-      if (f.otherUrl.trim()) links.push({ kind: "other", label: f.otherLabel.trim() || "Lien", url: f.otherUrl.trim() });
-    }
+    if (f.tricount.trim()) links.push({ kind: "tricount", label: "Tricount", url: f.tricount.trim() });
+    if (f.messenger.trim()) links.push({ kind: "messenger", label: "Conv Messenger", url: f.messenger.trim() });
+    if (f.airbnb.trim()) links.push({ kind: "airbnb", label: "Airbnb", url: f.airbnb.trim() });
+    if (f.otherUrl.trim()) links.push({ kind: "other", label: f.otherLabel.trim() || "Lien", url: f.otherUrl.trim() });
     // Une fin égale au début, c'est un event d'un jour : on ne la stocke pas.
     const endDate = isBig && f.endDate && f.endDate !== f.date ? f.endDate : "";
     const modules = { ...f.modules, datePoll: f.usePoll ? true : f.modules.datePoll };
@@ -1571,7 +1584,18 @@ function EventForm({ defScale, defCity, initial, onClose, onSave, places }) {
       </Field>
       <Field label="Détails (optionnel)"><textarea value={f.description} onChange={set("description")} rows={3} placeholder="Programme, ce qu'il faut ramener…" /></Field>
 
-      <Field group label="Sections à activer" hint="Rien par défaut : coche ce dont tu as besoin, l'aperçu se remplit en dessous.">
+      <button type="button" className={"more-toggle" + (more ? " open" : "")} aria-expanded={more} onClick={() => setMore((m) => !m)}>
+        <ChevronDown size={17} />
+        <span><b>Plus d'options</b><em>{extras.length ? extras.join(" · ") : "Sections, liens Maps, Tricount, Airbnb…"}</em></span>
+      </button>
+
+      {more && (<>
+
+      {/* Sections et liens prennent la même carte : trois habillages
+          différents dans un même volet faisaient trois formulaires. */}
+      <div className="opt-card">
+        <div className="opt-card-head"><ListTodo size={14} /> Sections à activer</div>
+        <p className="opt-card-hint">Rien par défaut : coche ce dont tu as besoin, l&apos;aperçu se remplit en dessous.</p>
         <div className="catpick">
           {MODULE_LABELS.map(([k, l]) => {
             const on = k === "datePoll" ? (f.usePoll || f.modules[k]) : f.modules[k];
@@ -1580,36 +1604,37 @@ function EventForm({ defScale, defCity, initial, onClose, onSave, places }) {
               onClick={() => !locked && setF({ ...f, modules: { ...f.modules, [k]: !f.modules[k] } })}>{on ? <Check size={13} /> : <Plus size={13} />} {l}</button>;
           })}
         </div>
-      </Field>
+        <ModulePreview modules={f.modules} usePoll={f.usePoll} />
+      </div>
 
-      <ModulePreview modules={f.modules} usePoll={f.usePoll} />
-
-      <div className="links-form">
-        <div className="links-form-head"><MapIcon size={14} /> Lien Google Maps</div>
+      <div className="opt-card">
+        <div className="opt-card-head"><MapIcon size={14} /> Lien Google Maps</div>
         <div className="row2">
           <Field label="Comment l'appeler"><input value={f.mapsLabel} onChange={set("mapsLabel")} placeholder="Ex. Point de RDV, Le resto…" /></Field>
           <Field label="Lien Maps"><input value={f.mapsUrl} onChange={set("mapsUrl")} placeholder="maps.app.goo.gl/…" /></Field>
         </div>
       </div>
 
-      {isBig && (
-        <div className="links-form">
-          <div className="links-form-head"><Sparkles size={14} /> Liens du plan <span>réservé aux big events</span></div>
-          <Field label="Lien Tricount"><input value={f.tricount} onChange={set("tricount")} placeholder="tricount.com/…" /></Field>
-          <Field label="Lien conv Messenger"><input value={f.messenger} onChange={set("messenger")} placeholder="m.me/… ou lien du groupe" /></Field>
-          <Field label="Lien Airbnb"><input value={f.airbnb} onChange={set("airbnb")} placeholder="airbnb.fr/rooms/…" /></Field>
-          <div className="row2">
-            <Field label="Autre lien — nom"><input value={f.otherLabel} onChange={set("otherLabel")} placeholder="Ex. Playlist, billetterie…" /></Field>
-            <Field label="Autre lien — URL"><input value={f.otherUrl} onChange={set("otherUrl")} placeholder="https://…" /></Field>
-          </div>
+      <div className="opt-card">
+        <div className="opt-card-head"><Link2 size={14} /> Liens du plan</div>
+        <Field label="Lien Tricount"><input value={f.tricount} onChange={set("tricount")} placeholder="tricount.com/…" /></Field>
+        <Field label="Lien conv Messenger"><input value={f.messenger} onChange={set("messenger")} placeholder="m.me/… ou lien du groupe" /></Field>
+        <Field label="Lien Airbnb"><input value={f.airbnb} onChange={set("airbnb")} placeholder="airbnb.fr/rooms/…" /></Field>
+        <div className="row2">
+          <Field label="Autre lien — nom"><input value={f.otherLabel} onChange={set("otherLabel")} placeholder="Ex. Playlist, billetterie…" /></Field>
+          <Field label="Autre lien — URL"><input value={f.otherUrl} onChange={set("otherUrl")} placeholder="https://…" /></Field>
         </div>
-      )}
+      </div>
 
+      </>)}
+
+      <div className="form-foot">
       <button className="btn-primary big" disabled={!f.title.trim() || !f.city || (!f.usePoll && !f.date) || invalid}
         onClick={save}>{!f.city ? "Choisis une ville"
           : (!f.usePoll && !f.date) ? "Choisis une date (ou un sondage)"
           : dateError ? "Corrige les dates"
           : editing ? "Enregistrer" : "Créer l'event"}</button>
+      </div>
     </Modal>
   );
 }
@@ -1995,9 +2020,21 @@ a{text-decoration:none;color:inherit;}
 .catchip{padding:8px 13px;border:2px solid;border-radius:20px;font-weight:600;font-size:13px;background:var(--card);transition:.12s;}
 .catchip.city{color:var(--ink);border-color:var(--line);}
 .catchip.city.on{background:var(--ink);color:#fff;border-color:var(--ink);}
-.links-form{background:#F0EBFA;border:1.5px dashed #C9B8F0;border-radius:16px;padding:14px 14px 2px;margin-bottom:18px;}
-.links-form-head{display:flex;align-items:center;gap:6px;font-family:'Bricolage Grotesque';font-weight:700;font-size:14px;color:var(--accent);margin-bottom:12px;}
-.links-form-head span{font-family:'Inter';font-weight:500;font-size:12px;color:var(--muted);margin-left:auto;}
+.more-toggle{display:flex;align-items:center;gap:11px;width:100%;text-align:left;padding:13px 14px;margin:2px 0 16px;background:var(--card);border:1.5px solid var(--line);border-radius:14px;color:var(--ink);}
+.more-toggle svg{flex-shrink:0;color:var(--muted);transform:rotate(-90deg);transition:transform .2s;}
+.more-toggle.open svg{transform:none;}
+.more-toggle span{display:flex;flex-direction:column;gap:2px;font-size:14.5px;}
+.more-toggle em{font-style:normal;font-size:12.5px;color:var(--muted);}
+/* Le bouton reste à portée de pouce, même au milieu des options dépliées. */
+.form-foot{position:sticky;bottom:0;z-index:2;margin:0 -20px;padding:10px 20px calc(10px + env(safe-area-inset-bottom));background:linear-gradient(transparent,var(--bg) 14px);}
+.form-foot .btn-primary.big{margin-top:0;}
+.opt-card{background:var(--card);border:1.5px solid var(--line);border-radius:16px;padding:14px 14px 2px;margin-bottom:14px;}
+.opt-card-head{display:flex;align-items:center;gap:7px;font-family:'Bricolage Grotesque';font-weight:700;font-size:15px;color:var(--ink);margin-bottom:12px;}
+.opt-card-head svg{color:var(--accent);}
+.opt-card-hint{color:var(--muted);font-size:12.5px;line-height:1.45;margin:-6px 0 12px;}
+.opt-card .catpick{margin-bottom:14px;}
+.opt-card .preview{margin-bottom:12px;}
+.opt-card-head span{font-family:'Inter';font-weight:500;font-size:12px;color:var(--muted);margin-left:auto;}
 .btn-primary{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--accent);color:#fff;font-weight:700;border-radius:14px;font-family:'Bricolage Grotesque';transition:.15s;}
 .btn-primary:disabled{opacity:.4;cursor:not-allowed;}
 .btn-primary.big{width:100%;padding:15px;font-size:16px;margin-top:6px;}
