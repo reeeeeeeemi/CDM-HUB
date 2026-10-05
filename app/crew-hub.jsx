@@ -6,7 +6,7 @@ import {
   X, Trash2, Sparkles, Send, Wallet, MessageCircle, Link2,
   ExternalLink, MessageSquare, ListTodo, CheckCircle2, Circle, CalendarClock, Lock,
   Car, Plane, TrainFront, UserPlus, Navigation, CalendarX, AlertTriangle, CalendarPlus,
-  House, Map as MapIcon, MapPinned, ShoppingCart, BedDouble, Share2, Settings2, Pencil, BellRing, KeyRound, Building, Cake, Wifi,
+  House, Map as MapIcon, MapPinned, ShoppingCart, BedDouble, Share2, Settings2, Pencil, BellRing, KeyRound, Building, Cake, Wifi, Copy,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ *
@@ -984,11 +984,12 @@ function EventDetail({ ev, me, members, actions, availability, onBack, onEdit, p
         {home && (home.address || home.doorCode || home.access || home.wifiName || home.wifiPassword) && (
           <div className="home-info">
             {home.address && <a href={mapsSearch(home.address)} target="_blank" rel="noopener noreferrer"><MapIcon size={14} /> {home.address}</a>}
-            {home.doorCode && <span><KeyRound size={14} /> Code : <b>{home.doorCode}</b></span>}
+            {home.doorCode && <span><KeyRound size={14} /> Code : <b>{home.doorCode}</b><CopyBtn text={home.doorCode} label="Copier le code" /></span>}
             {home.access && <span><Building size={14} /> {home.access}</span>}
             {(home.wifiName || home.wifiPassword) && (
               <span className="home-wifi"><Wifi size={14} />
                 <span>{home.wifiName && <>{home.wifiName}</>}{home.wifiName && home.wifiPassword && " · "}{home.wifiPassword && <>mdp <b>{home.wifiPassword}</b></>}</span>
+                {home.wifiPassword && <CopyBtn text={home.wifiPassword} label="Copier le mot de passe wifi" />}
               </span>
             )}
           </div>
@@ -1066,6 +1067,25 @@ function EventDetail({ ev, me, members, actions, availability, onBack, onEdit, p
         ))}
       </div>
     </div>
+  );
+}
+
+/** Copie un code ; la coche dit que c'est fait, sans toast à part. */
+function CopyBtn({ text, label }) {
+  const [done, setDone] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setDone(true);
+      setTimeout(() => setDone(false), 1500);
+    } catch {
+      // Hors HTTPS le presse-papier est refusé : le code reste lisible.
+    }
+  };
+  return (
+    <button type="button" className={"copy-btn" + (done ? " done" : "")} aria-label={label} onClick={copy}>
+      {done ? <Check size={14} /> : <Copy size={14} />}
+    </button>
   );
 }
 
@@ -2046,6 +2066,9 @@ a{text-decoration:none;color:inherit;}
 .home-info a{text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px;}
 .home-info svg{flex-shrink:0;color:var(--muted);}
 .home-wifi>span{min-width:0;word-break:break-all;}
+.copy-btn{flex-shrink:0;margin-left:auto;display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:10px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);}
+.copy-btn.done{border-color:#0F766E;color:#0F766E;}
+.home-info .copy-btn svg{color:inherit;}
 .poll-home{color:var(--accent);vertical-align:-2px;margin-right:5px;}
 .bday{display:flex;align-items:center;gap:9px;margin-bottom:12px;padding:12px 14px;border-radius:14px;background:var(--accent-soft);color:var(--ink);font-size:14px;}
 .bday svg{flex-shrink:0;color:var(--accent);}
