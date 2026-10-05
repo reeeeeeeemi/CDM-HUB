@@ -5,6 +5,7 @@ import { sendPush, type PushTarget } from "@/lib/push-send";
 export const dynamic = "force-dynamic";
 
 type Row = PushTarget & { event_id: string; title: string; joined: number };
+type Birthday = PushTarget & { pseudo: string; age: number };
 
 /**
  * Le récapitulatif du matin : qui s'est ajouté depuis hier sur les plans où
@@ -61,5 +62,30 @@ export async function GET(request: Request) {
     sent += res.sent;
   }
 
-  return Response.json({ devices: byDevice.size, sent });
+  const birthdays = await sendBirthdays(supabase, secret);
+
+  return Response.json({ devices: byDevice.size, sent, birthdays });
+}
+
+/**
+ * Les anniversaires du jour. Ils voyagent avec le récap parce que l'offre
+ * Vercel ne permet qu'une tâche planifiée par jour ; un échec ici ne doit
+ * pas faire échouer le récap, déjà parti.
+ */
+async function sendBirthdays(supabase: Awaited<ReturnType<typeof createClient>>, secret: string) {
+  const { data, error } = await supabase.rpc("birthdays_pending", { secret });
+  if (error) return { error: error.message };
+
+  let sent = 0;
+  for (const b of (data ?? []) as Birthday[]) {
+    const res = await sendPush([b], {
+      title: `🎂 ${b.pseudo} a ${b.age} ans aujourd'hui`,
+      body: "Pense à lui souhaiter !",
+      url: "/",
+      // Une par personne fêtée : deux annivs le même jour, deux notifications.
+      tag: `birthday:${b.pseudo}`,
+    });
+    sent += res.sent;
+  }
+  return { sent };
 }

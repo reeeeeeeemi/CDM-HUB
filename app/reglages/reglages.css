@@ -49,3 +49,24 @@
 .rg-people{display:flex;flex-wrap:wrap;gap:7px;}
 .rg-person{padding:6px 12px;border-radius:20px;background:var(--bg);border:1px solid var(--line);font-size:13px;font-weight:600;}
 .rg-person em{font-style:normal;color:var(--muted);font-weight:500;}
+
+.rg-field span svg{vertical-align:-2px;margin-right:3px;}
+.rg-btn svg{vertical-align:-2px;margin-right:4px;}
+
+/* Le carnet des lieux */
+.rg-places{display:flex;flex-direction:column;gap:8px;margin-bottom:10px;}
+.rg-place{border:1px solid var(--line);border-radius:12px;padding:11px 13px;background:var(--bg);display:flex;flex-direction:column;gap:5px;}
+.rg-place.editing{background:var(--card);border-color:var(--accent);}
+.rg-place-head{display:flex;align-items:baseline;gap:8px;}
+.rg-place-head b{font-size:14.5px;}
+.rg-place-head em{font-style:normal;color:var(--muted);font-size:12.5px;margin-left:auto;}
+.rg-place-line{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink);}
+.rg-place-line svg{flex-shrink:0;color:var(--muted);}
+a.rg-place-line{text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px;}
+.rg-place-acts{display:flex;gap:8px;margin-top:4px;}
+.rg-place-acts button{display:inline-flex;align-items:center;gap:5px;min-height:40px;padding:8px 12px;border-radius:10px;border:1.5px solid var(--line);background:var(--card);font-weight:600;font-size:13px;color:var(--ink);}
+.rg-place-acts button.danger{color:#B91C1C;}
+.rg-place-acts button.primary{margin-left:auto;background:var(--accent);border-color:var(--accent);color:#fff;}
+.rg-place-acts button:disabled{opacity:.5;}
+.rg-row2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.rg-row2 .rg-field input{min-width:0;}

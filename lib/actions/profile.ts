@@ -36,6 +36,7 @@ export async function setNotifyPrefs(prefs: {
   mine?: boolean;
   joined?: boolean;
   nudge?: boolean;
+  birthday?: boolean;
   digest?: boolean;
 }) {
   const supabase = await createClient();
@@ -54,6 +55,7 @@ export async function setNotifyPrefs(prefs: {
   if (prefs.mine !== undefined) patch.notify_mine = prefs.mine;
   if (prefs.joined !== undefined) patch.notify_joined = prefs.joined;
   if (prefs.nudge !== undefined) patch.notify_nudge = prefs.nudge;
+  if (prefs.birthday !== undefined) patch.notify_birthday = prefs.birthday;
   if (prefs.digest !== undefined) patch.notify_digest = prefs.digest;
   if (Object.keys(patch).length === 0) return {};
 
@@ -102,6 +104,29 @@ export async function setPseudo(pseudo: string) {
   if (!user) return { error: "Session expirée." };
 
   const { error } = await supabase.from("profiles").update({ pseudo: name }).eq("id", user.id);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/");
+  return {};
+}
+
+/** Sa date de naissance, ou rien pour l'effacer. */
+export async function setBirthday(date: string) {
+  if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return { error: "Date invalide." };
+
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return { error: "Session expirée." };
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ birthday: date || null })
+    .eq("id", user.id);
 
   if (error) return { error: error.message };
 

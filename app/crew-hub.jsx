@@ -6,7 +6,7 @@ import {
   X, Trash2, Sparkles, Send, Wallet, MessageCircle, Link2,
   ExternalLink, MessageSquare, ListTodo, CheckCircle2, Circle, CalendarClock, Lock,
   Car, Plane, TrainFront, UserPlus, Navigation, CalendarX, AlertTriangle, CalendarPlus,
-  House, Map as MapIcon, MapPinned, ShoppingCart, BedDouble, Share2, Settings2, Pencil, BellRing,
+  House, Map as MapIcon, MapPinned, ShoppingCart, BedDouble, Share2, Settings2, Pencil, BellRing, KeyRound, Building, Cake,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ *
@@ -20,7 +20,7 @@ import {
 // Tout passe par lib/hub-data : la base est normalisée, l'interface travaille
 // sur la forme imbriquée héritée du prototype, et la traduction vit là-bas.
 import * as db from "@/lib/hub-data";
-import { nameOf } from "@/lib/hub-data";
+import { nameOf, BIRTHDAYS } from "@/lib/hub-data";
 import { APP_NAME, CITIES } from "@/lib/brand";
 import { notifyNewEvent, notifyEventActivity, notifyAttendees, nudgeEvent } from "@/lib/actions/push";
 
@@ -104,6 +104,23 @@ const uid = () => {
 const normUrl = (u) => (!u ? "" : /^https?:\/\//i.test(u) ? u : "https://" + u);
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const isPastEvent = (e) => Boolean((e.endDate || e.date) && (e.endDate || e.date) < todayStr());
+
+const mapsSearch = (address) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+
+/**
+ * Qui fête son anniv aujourd'hui, avec son âge. Un 29 février se fête le 28
+ * les années qui n'en ont pas — la même règle que la notification du matin.
+ */
+function birthdaysToday(birthdays) {
+  const now = new Date();
+  const m = now.getMonth() + 1, d = now.getDate(), y = now.getFullYear();
+  const leap = new Date(y, 1, 29).getDate() === 29;
+  return Object.entries(birthdays).flatMap(([id, iso]) => {
+    const [by, bm, bd] = iso.split("-").map(Number);
+    const hit = (bm === m && bd === d) || (!leap && bm === 2 && bd === 29 && m === 2 && d === 28);
+    return hit ? [{ id, age: y - by }] : [];
+  });
+}
 
 function fmtDate(d) {
   if (!d) return "Date à définir";
@@ -240,14 +257,20 @@ function useCloseOnBack(open, close) {
  * Les suggestions n'apparaissent qu'à partir de 3 caractères : en deçà la
  * liste proposerait presque tout, et gênerait la frappe au lieu de l'aider.
  */
-function PlaceInput({ value, onChange, places, placeholder, onEnter }) {
+function PlaceInput({ value, onChange, places, placeholder, onEnter, saved = [], onPick }) {
   const [open, setOpen] = useState(true);
   const q = value.trim().toLowerCase();
+  // Les lieux du carnet dès la première lettre : on les cherche par leur nom,
+  // et ils sont peu nombreux. Le texte libre attend toujours 3 caractères.
+  const savedHits = onPick && q.length >= 1
+    ? saved.filter((p) => p.name.toLowerCase().includes(q) && p.name.toLowerCase() !== q).slice(0, 4)
+    : [];
+  const taken = new Set(saved.map((p) => p.name.toLowerCase()));
   const hits =
     q.length >= 3
       ? (places || []).filter((p) => {
           const l = p.toLowerCase();
-          return l.includes(q) && l !== q;
+          return l.includes(q) && l !== q && !taken.has(l);
         }).slice(0, 5)
       : [];
 
@@ -262,8 +285,14 @@ function PlaceInput({ value, onChange, places, placeholder, onEnter }) {
           if (e.key === "Enter") { setOpen(false); onEnter?.(); }
         }}
       />
-      {open && hits.length > 0 && (
+      {open && (hits.length > 0 || savedHits.length > 0) && (
         <div className="ac-list">
+          {savedHits.map((pl) => (
+            <button key={pl.id} type="button" className="ac-item saved"
+              onClick={() => { onPick(pl); setOpen(false); }}>
+              <House size={13} /> {pl.name} <em>{nameOf(pl.ownerId)}</em>
+            </button>
+          ))}
           {hits.map((pl) => (
             <button key={pl} type="button" className="ac-item"
               onClick={() => { onChange(pl); setOpen(false); }}>
@@ -299,6 +328,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
   const [events, setEvents] = useState([]);
   const [availability, setAvailability] = useState([]);
   const [members, setMembers] = useState([]);
+  const [savedPlaces, setSavedPlaces] = useState([]);
   // Renseigné quand on arrive par un lien partagé ou une notification.
   const [selected, setSelected] = useState(initialEvent || null);
   const [modal, setModal] = useState(null);
@@ -342,10 +372,11 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
 
   const reload = useCallback(async () => {
     try {
-      const { events: evs, availability: av, members: mb } = await db.loadHub();
+      const { events: evs, availability: av, members: mb, places: pl } = await db.loadHub();
       setEvents(evs);
       setAvailability(av);
       setMembers(mb);
+      setSavedPlaces(pl);
       setLoadError("");
       return evs;
     } catch (e) {
@@ -439,7 +470,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
   const editEvent = async (id, e) => {
     const old = events.find((x) => x.id === id);
     if (!old) return;
-    const placeChanged = e.place !== old.place;
+    const placeChanged = e.place !== old.place || e.placeId !== old.placeId;
     // Le lien posé en figeant le sondage pointait vers l'ancien lieu.
     const placeUrl = placeChanged ? "" : old.placeUrl;
     updateEvent(id, (x) => ({ ...x, ...e, placeUrl }));
@@ -448,7 +479,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
       title: e.title, category: e.category, scale: e.scale,
       city: e.city || null, starts_on: e.date || null, ends_on: e.endDate || null,
       starts_at: e.time || null, ends_at: e.endTime || null,
-      place: e.place || null, place_url: placeUrl || null,
+      place: e.place || null, place_url: placeUrl || null, place_id: e.placeId || null,
       description: e.description || null, links: e.links, modules: e.modules,
     }));
 
@@ -595,11 +626,11 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
       persist(() => db.delTransport(id, me));
     },
 
-    addPlace: (id, label, url) => {
+    addPlace: (id, label, url, placeId = "") => {
       const oid = uid();
-      updateEvent(id, (e) => ({ ...e, placePoll: [...(e.placePoll || []), { id: oid, label, url, by: me, votes: [me] }] }));
+      updateEvent(id, (e) => ({ ...e, placePoll: [...(e.placePoll || []), { id: oid, label, url, placeId, by: me, votes: [me] }] }));
       persist(async () => {
-        const r = await db.addPlaceOption(oid, id, me, label, url);
+        const r = await db.addPlaceOption(oid, id, me, label, url, placeId);
         return r.error ? r : await db.votePlace(oid, me, true);
       });
     },
@@ -622,8 +653,8 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
         title = e.title;
         const o = (e.placePoll || []).find((x) => x.id === oid);
         if (!o) return e;
-        patch = { place: o.label, place_url: o.url || null };
-        return { ...e, place: o.label, placeUrl: o.url || "" };
+        patch = { place: o.label, place_url: o.url || null, place_id: o.placeId || null };
+        return { ...e, place: o.label, placeUrl: o.url || "", placeId: o.placeId || "" };
       });
       if (patch) {
         persist(() => db.patchEvent(id, patch));
@@ -702,10 +733,13 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
             </div>
           )}
           {selectedEvent ? (
-            <EventDetail ev={selectedEvent} me={me} members={members} actions={actions} availability={availability} onBack={closeEvent} onEdit={() => setModal("edit")} places={places} />
+            <EventDetail ev={selectedEvent} me={me} members={members} actions={actions} availability={availability} onBack={closeEvent} onEdit={() => setModal("edit")} places={places} savedPlaces={savedPlaces} />
           ) : (
             <>
           <main className="wrap">
+                {birthdaysToday(BIRTHDAYS).map((b) => (
+                  <div className="bday" key={b.id}><Cake size={17} /> C&apos;est l&apos;anniv de <b>{nameOf(b.id)}</b> aujourd&apos;hui, {b.age} ans 🎉</div>
+                ))}
                 <div className="seg">
                   <button className={scale === "big" ? "on" : ""} onClick={() => setScale("big")}><Sparkles size={15} /> Big events</button>
                   <button className={scale === "daily" ? "on" : ""} onClick={() => setScale("daily")}>Au quotidien</button>
@@ -728,8 +762,8 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
           )}
         </>
       )}
-      {modal === "event" && <EventForm defScale={scale} defCity={city !== "all" ? city : ""} onClose={closeModal} onSave={addEvent} places={places} />}
-      {modal === "edit" && selectedEvent && <EventForm initial={selectedEvent} onClose={closeModal} onSave={(e) => editEvent(selectedEvent.id, e)} places={places} />}
+      {modal === "event" && <EventForm defScale={scale} defCity={city !== "all" ? city : ""} onClose={closeModal} onSave={addEvent} places={places} savedPlaces={savedPlaces} />}
+      {modal === "edit" && selectedEvent && <EventForm initial={selectedEvent} onClose={closeModal} onSave={(e) => editEvent(selectedEvent.id, e)} places={places} savedPlaces={savedPlaces} />}
     </div>
   );
 }
@@ -860,7 +894,7 @@ function EventCard({ ev, me, onOpen, past }) {
 }
 
 // ---------- event detail ----------
-function EventDetail({ ev, me, members, actions, availability, onBack, onEdit, places }) {
+function EventDetail({ ev, me, members, actions, availability, onBack, onEdit, places, savedPlaces }) {
   const [confirmDel, setConfirmDel] = useState(false);
   const [shared, setShared] = useState(false);
   // L'agenda ne se déplie qu'à la demande : les deux destinations
@@ -894,6 +928,7 @@ function EventDetail({ ev, me, members, actions, availability, onBack, onEdit, p
   const isBig = (ev.scale || "daily") === "big";
   const links = (ev.links || []).filter((l) => l.url);
   const isCreator = ev.createdBy === me;
+  const home = ev.placeId ? savedPlaces.find((p) => p.id === ev.placeId) : null;
   // Fin inférieure au début : l'event court jusqu'au lendemain.
   const overnight = Boolean(ev.time && ev.endTime && ev.endTime < ev.time);
   const timeLabel = ev.time
@@ -941,6 +976,15 @@ function EventDetail({ ev, me, members, actions, availability, onBack, onEdit, p
       <div className="wrap">
         <div className="info-row"><CalendarDays size={18} /><div><b>{fmtRange(ev.date, ev.endDate)}</b>{timeLabel && <span className="soft"> · {timeLabel}</span>}</div></div>
         {ev.place && <div className="info-row"><MapPin size={18} /><div><b>{ev.place}</b></div></div>}
+        {/* Un lieu du carnet : on lit ses infos à la source, toujours à jour
+            si son propriétaire change le code. */}
+        {home && (home.address || home.doorCode || home.access) && (
+          <div className="home-info">
+            {home.address && <a href={mapsSearch(home.address)} target="_blank" rel="noopener noreferrer"><MapIcon size={14} /> {home.address}</a>}
+            {home.doorCode && <span><KeyRound size={14} /> Code : <b>{home.doorCode}</b></span>}
+            {home.access && <span><Building size={14} /> {home.access}</span>}
+          </div>
+        )}
 
         {ev.description && <div className="detail-desc">{ev.description}</div>}
 
@@ -974,7 +1018,7 @@ function EventDetail({ ev, me, members, actions, availability, onBack, onEdit, p
         {modOn(ev, "transport") && <Transport ev={ev} me={me} actions={actions} />}
         {modOn(ev, "hosting") && <Hosting ev={ev} me={me} actions={actions} />}
         {modOn(ev, "datePoll") && <DatePoll ev={ev} me={me} isCreator={isCreator} actions={actions} availability={availability} />}
-        {modOn(ev, "placePoll") && <PlacePoll ev={ev} me={me} isCreator={isCreator} actions={actions} places={places} />}
+        {modOn(ev, "placePoll") && <PlacePoll ev={ev} me={me} isCreator={isCreator} actions={actions} places={places} savedPlaces={savedPlaces} />}
         {modOn(ev, "todos") && <TodoList ev={ev} me={me} actions={actions} kind="todo" />}
         {modOn(ev, "courses") && <TodoList ev={ev} me={me} actions={actions} kind="course" />}
 
@@ -1154,11 +1198,16 @@ function Transport({ ev, me, actions }) {
 }
 
 // ---------- sondage de lieu ----------
-function PlacePoll({ ev, me, isCreator, actions, places }) {
+function PlacePoll({ ev, me, isCreator, actions, places, savedPlaces }) {
   const [label, setLabel] = useState("");
   const [url, setUrl] = useState("");
+  const [placeId, setPlaceId] = useState("");
   const poll = [...(ev.placePoll || [])].sort((a, b) => b.votes.length - a.votes.length);
-  const add = () => { if (!label.trim()) return; actions.addPlace(ev.id, label.trim(), url.trim()); setLabel(""); setUrl(""); };
+  const add = () => {
+    if (!label.trim()) return;
+    actions.addPlace(ev.id, label.trim(), url.trim(), placeId);
+    setLabel(""); setUrl(""); setPlaceId("");
+  };
   return (
     <section className="block">
       <div className="block-head"><MapPinned size={17} /> Sondage de lieu</div>
@@ -1170,7 +1219,7 @@ function PlacePoll({ ev, me, isCreator, actions, places }) {
           <div className="pollrow" key={o.id}>
             <button className={"pollvote" + (voted ? " on" : "")} onClick={() => actions.votePlace(ev.id, o.id)}><Check size={14} /> {o.votes.length}</button>
             <div className="pollinfo">
-              <b>{o.label}</b>
+              <b>{o.placeId && <House size={13} className="poll-home" />}{o.label}</b>
               {o.url && <a className="poll-maps" href={normUrl(o.url)} target="_blank" rel="noopener noreferrer"><MapIcon size={12} /> Voir sur Maps</a>}
               {o.votes.length > 0 && <div className="pollnames">{o.votes.map(nameOf).join(", ")}</div>}
             </div>
@@ -1181,7 +1230,9 @@ function PlacePoll({ ev, me, isCreator, actions, places }) {
         );
       })}
       <div className="placeadd">
-        <PlaceInput value={label} onChange={setLabel} places={places} placeholder="Nom du lieu — Ex. Le Bibent" onEnter={add} />
+        <PlaceInput value={label} onChange={(v) => { setLabel(v); setPlaceId(""); }} places={places}
+          saved={savedPlaces} onPick={(p) => { setLabel(p.name); setPlaceId(p.id); setUrl(p.address ? mapsSearch(p.address) : ""); }}
+          placeholder="Nom du lieu — Ex. Le Bibent, Chez Kenny" onEnter={add} />
         <div className="placeadd-row">
           <input value={url} placeholder="Lien Google Maps (optionnel)" onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
           <button className="addbtn" onClick={add} disabled={!label.trim()}><Plus size={18} /></button>
@@ -1539,7 +1590,7 @@ function formFromEvent(ev) {
   return {
     title: ev.title, category: ev.category, scale: ev.scale || "daily", city: ev.city,
     date: ev.date, endDate: ev.endDate, time: ev.time, endTime: ev.endTime,
-    place: ev.place, description: ev.description,
+    place: ev.place, placeId: ev.placeId || "", description: ev.description,
     // Sans date, l'event est forcément en sondage.
     usePoll: !ev.date,
     tricount: link("tricount").url || "", messenger: link("messenger").url || "", airbnb: link("airbnb").url || "",
@@ -1552,11 +1603,11 @@ function formFromEvent(ev) {
 // Un big event est le plus souvent un voyage, un plan du quotidien une soirée.
 const defCat = (scale) => (scale === "big" ? "voyage" : "soiree");
 
-function EventForm({ defScale, defCity, initial, onClose, onSave, places }) {
+function EventForm({ defScale, defCity, initial, onClose, onSave, places, savedPlaces = [] }) {
   const editing = Boolean(initial);
   const [f, setF] = useState(() => initial ? formFromEvent(initial) : {
     title: "", category: defCat(defScale || "big"), scale: defScale || "big", city: defCity || "",
-    date: "", endDate: "", time: "", endTime: "", place: "", description: "",
+    date: "", endDate: "", time: "", endTime: "", place: "", placeId: "", description: "",
     usePoll: false, tricount: "", messenger: "", airbnb: "",
     mapsLabel: "", mapsUrl: "", otherLabel: "", otherUrl: "",
     modules: { ...(defScale === "big" ? MODULES_BIG : MODULES_DAILY) },
@@ -1621,7 +1672,7 @@ function EventForm({ defScale, defCity, initial, onClose, onSave, places }) {
       title: f.title.trim(), category: f.category, scale: f.scale, city: f.city,
       date: f.usePoll ? "" : f.date, endDate: f.usePoll ? "" : endDate,
       time: isBig || f.usePoll ? "" : f.time, endTime: isBig || f.usePoll ? "" : f.endTime,
-      place: f.place.trim(), description: f.description.trim(), links, modules,
+      place: f.place.trim(), placeId: f.placeId, description: f.description.trim(), links, modules,
     });
   };
 
@@ -1664,8 +1715,11 @@ function EventForm({ defScale, defCity, initial, onClose, onSave, places }) {
       {/* group : dans un <label>, un clic sur une suggestion serait renvoyé
           au champ et rouvrirait la liste. */}
       <Field group label="Où ?">
-        <PlaceInput value={f.place} onChange={(v) => setF({ ...f, place: v })} places={places}
-          placeholder="Adresse, bar, lieu…" />
+        {/* Retaper le nom détache le lieu du carnet : ce n'est plus lui. */}
+        <PlaceInput value={f.place} onChange={(v) => setF({ ...f, place: v, placeId: "" })} places={places}
+          saved={savedPlaces} onPick={(p) => setF({ ...f, place: p.name, placeId: p.id })}
+          placeholder="Adresse, bar, chez quelqu'un…" />
+        {f.placeId && <p className="field-note"><House size={14} /> Lieu du carnet : l&apos;adresse et le code s&apos;afficheront sur l&apos;event.</p>}
       </Field>
       <Field label="Détails (optionnel)"><textarea value={f.description} onChange={set("description")} rows={3} placeholder="Programme, ce qu'il faut ramener…" /></Field>
 
@@ -1976,6 +2030,15 @@ a{text-decoration:none;color:inherit;}
 .ac-list{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:20;background:var(--card);border:1.5px solid var(--line);border-radius:12px;box-shadow:0 10px 26px rgba(0,0,0,.13);overflow:hidden;}
 .ac-item{display:flex;align-items:center;gap:8px;width:100%;padding:11px 13px;font-size:13.5px;font-weight:600;color:var(--ink);text-align:left;background:none;border:0;border-bottom:1px solid var(--line);}
 .ac-item:last-child{border-bottom:0;}
+.ac-item.saved svg{color:var(--accent);}
+.ac-item em{margin-left:auto;font-style:normal;font-weight:500;font-size:12px;color:var(--muted);}
+.home-info{display:flex;flex-direction:column;gap:8px;padding:12px 0 12px 30px;border-bottom:1px solid var(--line);font-size:14px;}
+.home-info a,.home-info span{display:flex;align-items:center;gap:8px;color:var(--ink);}
+.home-info a{text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px;}
+.home-info svg{flex-shrink:0;color:var(--muted);}
+.poll-home{color:var(--accent);vertical-align:-2px;margin-right:5px;}
+.bday{display:flex;align-items:center;gap:9px;margin-bottom:12px;padding:12px 14px;border-radius:14px;background:var(--accent-soft);color:var(--ink);font-size:14px;}
+.bday svg{flex-shrink:0;color:var(--accent);}
 .ac-item:hover{background:var(--bg);color:var(--accent);}
 .placeadd{display:flex;flex-direction:column;gap:8px;margin-top:12px;}
 .placeadd-row{display:flex;gap:8px;}
