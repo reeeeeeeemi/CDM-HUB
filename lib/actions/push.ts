@@ -74,9 +74,8 @@ export async function notifyNewEvent(
 /**
  * Notifie les gens chauds qu'un plan a bougé.
  *
- * Faute d'écran d'édition, une date ou un lieu ne changent qu'en figeant un
- * sondage : « le sondage se clôt » et « la date change » sont le même
- * instant, et cette fonction couvre les deux — plus l'annulation.
+ * Une date, un horaire ou un lieu changent en figeant un sondage ou en
+ * modifiant l'event ; cette fonction couvre les deux, plus l'annulation.
  */
 export async function notifyAttendees(eventId: string, title: string, what: string) {
   const supabase = await createClient();

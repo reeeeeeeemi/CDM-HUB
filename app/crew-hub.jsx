@@ -6,7 +6,7 @@ import {
   X, Trash2, Sparkles, Send, Wallet, MessageCircle, Link2,
   ExternalLink, MessageSquare, ListTodo, CheckCircle2, Circle, CalendarClock, Lock,
   Car, Plane, TrainFront, UserPlus, Navigation, CalendarX, AlertTriangle, CalendarPlus,
-  House, Map as MapIcon, MapPinned, ShoppingCart, BedDouble, Share2, Settings2,
+  House, Map as MapIcon, MapPinned, ShoppingCart, BedDouble, Share2, Settings2, Pencil,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ *
@@ -98,6 +98,7 @@ const uid = () => {
 };
 const normUrl = (u) => (!u ? "" : /^https?:\/\//i.test(u) ? u : "https://" + u);
 const todayStr = () => new Date().toISOString().slice(0, 10);
+const isPastEvent = (e) => Boolean((e.endDate || e.date) && (e.endDate || e.date) < todayStr());
 
 function fmtDate(d) {
   if (!d) return "Date à définir";
@@ -424,6 +425,37 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
     notifyNewEvent(row.id, row.title, row.scale, row.city || "", fmtRange(row.date, row.endDate)).catch(() => {});
   };
 
+  /**
+   * Le formulaire renvoie l'event entier, on écrit tout d'un bloc. Seuls la
+   * date, l'horaire et le lieu valent une notification : une faute corrigée
+   * dans le titre ne mérite pas de faire vibrer un téléphone.
+   */
+  const editEvent = async (id, e) => {
+    const old = events.find((x) => x.id === id);
+    if (!old) return;
+    const placeChanged = e.place !== old.place;
+    // Le lien posé en figeant le sondage pointait vers l'ancien lieu.
+    const placeUrl = placeChanged ? "" : old.placeUrl;
+    updateEvent(id, (x) => ({ ...x, ...e, placeUrl }));
+    setModal(null);
+    await persist(() => db.patchEvent(id, {
+      title: e.title, category: e.category, scale: e.scale,
+      city: e.city || null, starts_on: e.date || null, ends_on: e.endDate || null,
+      starts_at: e.time || null, ends_at: e.endTime || null,
+      place: e.place || null, place_url: placeUrl || null,
+      description: e.description || null, links: e.links, modules: e.modules,
+    }));
+
+    const changes = [];
+    if (old.date && !e.date) changes.push("Date remise au vote");
+    else if (e.date !== old.date || e.endDate !== old.endDate) changes.push(`Nouvelle date : ${fmtRange(e.date, e.endDate)}`);
+    if (e.time !== old.time || e.endTime !== old.endTime) {
+      changes.push(e.time ? `Nouvel horaire : ${e.endTime ? `${e.time} – ${e.endTime}` : e.time}` : "Horaire retiré");
+    }
+    if (placeChanged) changes.push(e.place ? `Nouveau lieu : ${e.place}` : "Lieu retiré");
+    if (changes.length) notifyAttendees(id, e.title, changes.join(" · ")).catch(() => {});
+  };
+
   const delEvent = useCallback(async (id, title = "") => {
     setEvents((prev) => prev.filter((e) => e.id !== id));
     closeEvent();
@@ -519,9 +551,8 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
       }) }));
       persist(() => db.voteDate(oid, me, on));
     },
-    // Figer un sondage est le seul moment où une date ou un lieu changent :
-    // il n'existe pas d'écran d'édition. « Le sondage se clôt » et « la date
-    // change » sont donc le même instant, qu'une seule notification couvre.
+    // Figer un sondage, c'est fixer la date : « le sondage se clôt » et « la
+    // date change » sont le même instant, qu'une seule notification couvre.
     lockDate: (id, oid) => {
       let patch, title = "";
       updateEvent(id, (e) => {
@@ -618,9 +649,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
     const match = events.filter((e) => (e.scale || "daily") === scale && (city === "all" || e.city === city));
     const keyed = match.map((e) => ({ e, k: e.date || "9999" }));
     keyed.sort((a, b) => a.k.localeCompare(b.k));
-    const now = todayStr();
-    const isPast = (e) => (e.endDate || e.date) && (e.endDate || e.date) < now;
-    return { up: keyed.filter((x) => !isPast(x.e)).map((x) => x.e), past: keyed.filter((x) => isPast(x.e)).reverse().map((x) => x.e) };
+    return { up: keyed.filter((x) => !isPastEvent(x.e)).map((x) => x.e), past: keyed.filter((x) => isPastEvent(x.e)).reverse().map((x) => x.e) };
   }, [events, scale, city]);
 
   // Tous les lieux déjà écrits par le groupe : ceux des events et ceux des
@@ -646,7 +675,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
           {/* Le header reste en place partout : liste comme fiche d'event. */}
           <Header meName={meName} onSignOut={onSignOut} onHome={goHome} notifyCity={notifyCity} onSetCity={onSetCity} />
           {selectedEvent ? (
-            <EventDetail ev={selectedEvent} me={me} actions={actions} availability={availability} onBack={closeEvent} places={places} />
+            <EventDetail ev={selectedEvent} me={me} actions={actions} availability={availability} onBack={closeEvent} onEdit={() => setModal("edit")} places={places} />
           ) : (
             <>
           {loadError && (
@@ -691,6 +720,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
         </>
       )}
       {modal === "event" && <EventForm defScale={scale} defCity={city !== "all" ? city : ""} onClose={closeModal} onSave={addEvent} places={places} />}
+      {modal === "edit" && selectedEvent && <EventForm initial={selectedEvent} onClose={closeModal} onSave={(e) => editEvent(selectedEvent.id, e)} places={places} />}
     </div>
   );
 }
@@ -832,7 +862,7 @@ function EventCard({ ev, me, onOpen, past }) {
 }
 
 // ---------- event detail ----------
-function EventDetail({ ev, me, actions, availability, onBack, places }) {
+function EventDetail({ ev, me, actions, availability, onBack, onEdit, places }) {
   const [confirmDel, setConfirmDel] = useState(false);
   const [shared, setShared] = useState(false);
   // L'agenda ne se déplie qu'à la demande : les deux destinations
@@ -966,6 +996,10 @@ function EventDetail({ ev, me, actions, availability, onBack, places }) {
 
         {isCreator && <ModuleToggles ev={ev} actions={actions} />}
         <div className="detail-by">Créé par {nameOf(ev.createdBy)}</div>
+        {/* Un event passé est figé : on ne réécrit pas l'histoire. */}
+        {isCreator && !isPastEvent(ev) && (
+          <button className="ghost-btn edit-btn" onClick={onEdit}><Pencil size={15} /> Modifier l&apos;event</button>
+        )}
         {isCreator && (confirmDel ? (
           <div className="del-confirm" role="alertdialog" aria-label="Confirmer la suppression">
             <p><AlertTriangle size={15} /> Supprimer «&nbsp;{ev.title}&nbsp;» ?</p>
@@ -1428,8 +1462,26 @@ function ScaleSeg({ value, onChange }) {
   );
 }
 
-function EventForm({ defScale, defCity, onClose, onSave, places }) {
-  const [f, setF] = useState({
+/** Remet un event existant à plat dans les champs du formulaire. */
+function formFromEvent(ev) {
+  const link = (kind) => (ev.links || []).find((l) => l.kind === kind) || {};
+  const maps = link("maps"), other = link("other");
+  return {
+    title: ev.title, category: ev.category, scale: ev.scale || "daily", city: ev.city,
+    date: ev.date, endDate: ev.endDate, time: ev.time, endTime: ev.endTime,
+    place: ev.place, description: ev.description,
+    // Sans date, l'event est forcément en sondage.
+    usePoll: !ev.date,
+    tricount: link("tricount").url || "", messenger: link("messenger").url || "", airbnb: link("airbnb").url || "",
+    mapsLabel: maps.url ? maps.label : "", mapsUrl: maps.url || "",
+    otherLabel: other.url ? other.label : "", otherUrl: other.url || "",
+    modules: { ...(ev.modules || (ev.scale === "big" ? MODULES_BIG : MODULES_DAILY)) },
+  };
+}
+
+function EventForm({ defScale, defCity, initial, onClose, onSave, places }) {
+  const editing = Boolean(initial);
+  const [f, setF] = useState(() => initial ? formFromEvent(initial) : {
     title: "", category: "soiree", scale: defScale || "big", city: defCity || "",
     date: "", endDate: "", time: "", endTime: "", place: "", description: "",
     usePoll: false, tricount: "", messenger: "", airbnb: "",
@@ -1489,9 +1541,9 @@ function EventForm({ defScale, defCity, onClose, onSave, places }) {
   };
 
   return (
-    <Modal title={isBig ? "Nouveau big event" : "Nouvel event quotidien"} onClose={onClose}>
+    <Modal title={editing ? "Modifier l'event" : isBig ? "Nouveau big event" : "Nouvel event quotidien"} onClose={onClose}>
       <Field group label="Nature de l'event"><ScaleSeg value={f.scale} onChange={switchScale} /></Field>
-      <Field label="Ça s'appelle comment ?"><input value={f.title} onChange={set("title")} autoFocus placeholder={isBig ? "Ex. Nouvel An à Rome" : "Ex. Apéro du jeudi"} /></Field>
+      <Field label="Ça s'appelle comment ?"><input value={f.title} onChange={set("title")} autoFocus={!editing} placeholder={isBig ? "Ex. Nouvel An à Rome" : "Ex. Apéro du jeudi"} /></Field>
       <Field group label="Ville"><CityPicker value={f.city} onChange={(c) => setF({ ...f, city: c })} /></Field>
       <Field group label="Catégorie"><CatPicker value={f.category} onChange={(c) => setF({ ...f, category: c })} /></Field>
 
@@ -1515,7 +1567,12 @@ function EventForm({ defScale, defCity, onClose, onSave, places }) {
       ))}
 
       <label className="toggle-row">
-        <input type="checkbox" checked={f.usePoll} onChange={(e) => setF({ ...f, usePoll: e.target.checked })} />
+        <input type="checkbox" checked={f.usePoll} onChange={(e) => setF({
+          ...f, usePoll: e.target.checked,
+          // En modif, sortir du sondage le masque. Les créneaux et les votes
+          // restent en base : recocher la section les fait revenir.
+          modules: editing && !e.target.checked ? { ...f.modules, datePoll: false } : f.modules,
+        })} />
         <span><b>Pas encore de date ?</b> Lancer un sondage de dates à la place<em>Parfait pour un plan lointain — vous voterez le créneau ensuite.</em></span>
       </label>
 
@@ -1565,7 +1622,7 @@ function EventForm({ defScale, defCity, onClose, onSave, places }) {
         onClick={save}>{!f.city ? "Choisis une ville"
           : (!f.usePoll && !f.date) ? "Choisis une date (ou un sondage)"
           : dateError ? "Corrige les dates"
-          : "Créer l'event"}</button>
+          : editing ? "Enregistrer" : "Créer l'event"}</button>
     </Modal>
   );
 }
@@ -1855,6 +1912,7 @@ a{text-decoration:none;color:inherit;}
 .field.mini input{padding:10px 12px;font-size:16px;}
 
 .detail-by{color:var(--muted);font-size:13px;margin:22px 0 10px;}
+.edit-btn{gap:7px;padding:10px 14px;border-radius:11px;border:1px solid var(--line);background:var(--card);color:var(--ink);margin:0 8px 10px 0;}
 .del-btn{display:inline-flex;align-items:center;gap:7px;color:#DC2626;font-weight:600;font-size:14px;padding:10px 14px;border-radius:11px;border:1px solid #FCA5A5;background:#FEF2F2;}
 .del-confirm{background:#FDECEC;border:1.5px solid #F3C6C6;border-radius:16px;padding:15px;margin-top:14px;}
 .del-confirm p{display:flex;align-items:center;gap:7px;margin:0;font-weight:700;font-size:14.5px;color:#B91C1C;}
