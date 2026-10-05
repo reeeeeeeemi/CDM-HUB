@@ -90,6 +90,25 @@ export async function notifyAttendees(eventId: string, title: string, what: stri
   });
 }
 
+/**
+ * La relance du créateur : ceux qui n'ont pas répondu, ou « peut-être ».
+ *
+ * La base vérifie le droit et le délai d'un jour, et refuse sinon : son
+ * message remonte tel quel jusqu'au bouton.
+ */
+export async function nudgeEvent(eventId: string, title: string, what: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("nudge_event", { event_id: eventId });
+  if (error) return { error: error.message, sent: 0 };
+
+  return sendPush((data ?? []) as PushTarget[], {
+    title,
+    body: what,
+    url: `/event/${eventId}`,
+    tag: `event:${eventId}`,
+  });
+}
+
 /** Notifie l'auteur d'un event qu'on a réagi dessus. */
 export async function notifyEventActivity(eventId: string, title: string, what: string) {
   const supabase = await createClient();

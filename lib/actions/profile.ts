@@ -35,6 +35,7 @@ export async function setNotifyPrefs(prefs: {
   city?: boolean;
   mine?: boolean;
   joined?: boolean;
+  nudge?: boolean;
   digest?: boolean;
 }) {
   const supabase = await createClient();
@@ -52,6 +53,7 @@ export async function setNotifyPrefs(prefs: {
   if (prefs.city !== undefined) patch.notify_city = prefs.city;
   if (prefs.mine !== undefined) patch.notify_mine = prefs.mine;
   if (prefs.joined !== undefined) patch.notify_joined = prefs.joined;
+  if (prefs.nudge !== undefined) patch.notify_nudge = prefs.nudge;
   if (prefs.digest !== undefined) patch.notify_digest = prefs.digest;
   if (Object.keys(patch).length === 0) return {};
 

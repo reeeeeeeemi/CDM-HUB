@@ -6,7 +6,7 @@ import {
   X, Trash2, Sparkles, Send, Wallet, MessageCircle, Link2,
   ExternalLink, MessageSquare, ListTodo, CheckCircle2, Circle, CalendarClock, Lock,
   Car, Plane, TrainFront, UserPlus, Navigation, CalendarX, AlertTriangle, CalendarPlus,
-  House, Map as MapIcon, MapPinned, ShoppingCart, BedDouble, Share2, Settings2, Pencil,
+  House, Map as MapIcon, MapPinned, ShoppingCart, BedDouble, Share2, Settings2, Pencil, BellRing,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ *
@@ -22,7 +22,7 @@ import {
 import * as db from "@/lib/hub-data";
 import { nameOf } from "@/lib/hub-data";
 import { APP_NAME, CITIES } from "@/lib/brand";
-import { notifyNewEvent, notifyEventActivity, notifyAttendees } from "@/lib/actions/push";
+import { notifyNewEvent, notifyEventActivity, notifyAttendees, nudgeEvent } from "@/lib/actions/push";
 
 // ---------- config ----------
 // Couleurs assez sombres pour porter du texte : au moins 4,5:1 en étiquette
@@ -54,8 +54,11 @@ const TRANSPORT = {
   avion:   { label: "En avion",          icon: Plane,      color: "#7C3AED", time: "arrivee" },
   autre:   { label: "Par mes moyens",    icon: Navigation, color: "#64748B" },
 };
-const TIME_LABEL = { depart: "Heure de départ", arrivee: "Heure d'arrivée sur place" };
-const TIME_SHORT = { depart: "part à", arrivee: "arrive à" };
+const TIME_LABEL = { depart: "Départ", arrivee: "Arrivée sur place" };
+const TIME_SHORT = { depart: "part", arrivee: "arrive" };
+// « part le sam. 12 oct. à 08:00 », ou la moitié qu'on a renseignée.
+const tripWhen = (verb, date, time) =>
+  [verb, date && `le ${shortDate(date)}`, time && `à ${time}`].filter(Boolean).join(" ");
 // modules par défaut selon le type d'event
 // Big comme quotidien : rien par défaut, on coche ce dont on a besoin.
 const MODULES_BIG   = { transport: false, hosting: false, datePoll: false, placePoll: false, todos: false, courses: false, comments: false };
@@ -295,6 +298,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
   const setCity = scale === "big" ? setCityBig : setCityDaily;
   const [events, setEvents] = useState([]);
   const [availability, setAvailability] = useState([]);
+  const [members, setMembers] = useState([]);
   // Renseigné quand on arrive par un lien partagé ou une notification.
   const [selected, setSelected] = useState(initialEvent || null);
   const [modal, setModal] = useState(null);
@@ -338,9 +342,10 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
 
   const reload = useCallback(async () => {
     try {
-      const { events: evs, availability: av } = await db.loadHub();
+      const { events: evs, availability: av, members: mb } = await db.loadHub();
       setEvents(evs);
       setAvailability(av);
+      setMembers(mb);
       setLoadError("");
       return evs;
     } catch (e) {
@@ -485,6 +490,18 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
       if (status === "in") notifyEventActivity(id, title, `${meName} est chaud`).catch(() => {});
     },
     del: delEvent,
+    // La base a le dernier mot (créateur, délai d'un jour) : en cas de refus,
+    // on remet la date d'avant et on rend son message au bouton.
+    // Un mot perso part signé, comme un commentaire : sans nom, on ne saurait
+    // pas qui relance. Le texte par défaut, lui, se suffit.
+    nudge: async (id, text, fallback) => {
+      const what = text ? `${meName} : ${text}` : fallback;
+      let title = "", before = 0;
+      updateEvent(id, (e) => { title = e.title; before = e.nudgedAt; return { ...e, nudgedAt: Date.now() }; });
+      const r = await nudgeEvent(id, title, what).catch((e) => ({ error: e?.message || "Relance impossible." }));
+      if (r?.error) updateEvent(id, (e) => ({ ...e, nudgedAt: before }));
+      return r;
+    },
     setModule: (id, key, val) => {
       let modules;
       updateEvent(id, (e) => {
@@ -685,7 +702,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
             </div>
           )}
           {selectedEvent ? (
-            <EventDetail ev={selectedEvent} me={me} actions={actions} availability={availability} onBack={closeEvent} onEdit={() => setModal("edit")} places={places} />
+            <EventDetail ev={selectedEvent} me={me} members={members} actions={actions} availability={availability} onBack={closeEvent} onEdit={() => setModal("edit")} places={places} />
           ) : (
             <>
           <main className="wrap">
@@ -843,7 +860,7 @@ function EventCard({ ev, me, onOpen, past }) {
 }
 
 // ---------- event detail ----------
-function EventDetail({ ev, me, actions, availability, onBack, onEdit, places }) {
+function EventDetail({ ev, me, members, actions, availability, onBack, onEdit, places }) {
   const [confirmDel, setConfirmDel] = useState(false);
   const [shared, setShared] = useState(false);
   // L'agenda ne se déplie qu'à la demande : les deux destinations
@@ -938,6 +955,8 @@ function EventDetail({ ev, me, actions, availability, onBack, onEdit, places }) 
           {mine && <p className="rsvp-undo">Reclique sur ta réponse pour la retirer.</p>}
         </div>
 
+        {isCreator && !isPastEvent(ev) && <Nudge ev={ev} me={me} members={members} onNudge={actions.nudge} />}
+
         {["in", "maybe", "out"].map((k) => groups[k].length > 0 && (
           <div className="people" key={k}>
             <div className="people-label" style={{ color: RS[k].color }}>{RS[k].label} · {groups[k].length}</div>
@@ -998,6 +1017,66 @@ function EventDetail({ ev, me, actions, availability, onBack, onEdit, places }) 
   );
 }
 
+// ---------- relance ----------
+const NUDGE_DELAY = 24 * 3600 * 1000;
+const nudgeWaiting = (at) => Boolean(at) && Date.now() - at < NUDGE_DELAY;
+
+/**
+ * Le créateur relance ceux qui n'ont pas répondu, et les « peut-être ».
+ * Le compte affiché est celui des membres visés : qui a coupé les relances
+ * ou n'a pas activé les notifs ne recevra rien, mais on ne le sait pas d'ici.
+ */
+function Nudge({ ev, me, members, onNudge }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const targets = members.filter((m) => m !== me && (!ev.rsvps?.[m] || ev.rsvps[m] === "maybe")).length;
+  const wait = nudgeWaiting(ev.nudgedAt);
+  // Tant qu'un sondage est ouvert, on ne demande pas « tu viens ? » à un
+  // plan sans date : on demande de voter.
+  const fallback = !ev.date && modOn(ev, "datePoll") ? "Vote pour la date"
+    : !ev.place && modOn(ev, "placePoll") ? "Vote pour le lieu"
+    : "Tu viens ? Dis-le en un clic";
+
+  const send = async () => {
+    setBusy(true); setErr("");
+    const r = await onNudge(ev.id, text.trim(), fallback);
+    setBusy(false);
+    if (r?.error) { setErr(r.error); return; }
+    setOpen(false); setText("");
+  };
+
+  if (wait || targets === 0) {
+    return (
+      <div className="nudge">
+        <button className="nudge-btn" disabled><BellRing size={15} />
+          {wait ? `Relancé ${timeAgo(ev.nudgedAt)}` : "Tout le monde a répondu"}</button>
+        {wait && <p className="nudge-hint">Prochaine relance possible demain.</p>}
+      </div>
+    );
+  }
+  return (
+    <div className="nudge">
+      {!open ? (
+        <button className="nudge-btn" onClick={() => setOpen(true)}><BellRing size={15} />
+          Relancer {targets} fréro{targets > 1 ? "s" : ""}</button>
+      ) : (
+        <div className="nudge-form">
+          <p className="nudge-hint">Ceux qui n&apos;ont pas répondu, et les « peut-être ». Une relance par jour.</p>
+          <textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} maxLength={140}
+            placeholder={`Un petit mot ? Sinon : « ${fallback} »`} />
+          {err && <p className="field-err" role="alert"><AlertTriangle size={14} /> {err}</p>}
+          <div className="nudge-acts">
+            <button className="ghost-btn" onClick={() => { setOpen(false); setErr(""); }}>Annuler</button>
+            <button className="btn-primary sm" disabled={busy} onClick={send}><BellRing size={15} /> {busy ? "Envoi…" : "Envoyer la relance"}</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---------- qui y va comment ----------
 function Transport({ ev, me, actions }) {
   const list = ev.transport || [];
@@ -1006,6 +1085,8 @@ function Transport({ ev, me, actions }) {
   const [mode, setMode] = useState(mine?.mode || "voiture");
   const [seats, setSeats] = useState(mine?.seats ? String(mine.seats) : "");
   const [at, setAt] = useState(mine?.at || "");
+  // Le jour de l'event par défaut : c'est le plus souvent celui du trajet.
+  const [atDate, setAtDate] = useState(mine?.atDate || ev.date || "");
   const seatsOffered = list.filter((t) => t.mode === "voiture").reduce((s, t) => s + (Number(t.seats) || 0), 0);
   const seekers = list.filter((t) => t.mode === "covoit").length;
   const timeKind = TRANSPORT[mode]?.time;
@@ -1014,6 +1095,7 @@ function Transport({ ev, me, actions }) {
       mode,
       seats: mode === "voiture" ? (Number(seats) || 0) : 0,
       at: timeKind ? at : "",
+      atDate: timeKind ? atDate : "",
     });
     setEditing(false);
   };
@@ -1035,7 +1117,7 @@ function Transport({ ev, me, actions }) {
             <div className="tp-info">
               <b>{nameOf(t.by)}</b> · {m.label}
               {t.mode === "voiture" && t.seats > 0 && <span className="soft"> ({t.seats} place{t.seats > 1 ? "s" : ""})</span>}
-              {t.at && m.time && <span className="tp-at">{TIME_SHORT[m.time]} {t.at}</span>}
+              {(t.at || t.atDate) && m.time && <span className="tp-at">{tripWhen(TIME_SHORT[m.time], t.atDate, t.at)}</span>}
             </div>
           </div>
         );
@@ -1051,10 +1133,13 @@ function Transport({ ev, me, actions }) {
           </div>
           {mode === "voiture" && <input className="tp-seats" type="number" min="0" value={seats} placeholder="Places dispo" onChange={(e) => setSeats(e.target.value)} />}
           {timeKind && (
-            <label className="tp-time">
+            <div className="tp-time">
               <span>{TIME_LABEL[timeKind]} <em>(optionnel)</em></span>
-              <input type="time" value={at} onChange={(e) => setAt(e.target.value)} />
-            </label>
+              <div className="tp-when">
+                <input type="date" value={atDate} onChange={(e) => setAtDate(e.target.value)} aria-label={`${TIME_LABEL[timeKind]} : jour`} />
+                <input type="time" value={at} onChange={(e) => setAt(e.target.value)} aria-label={`${TIME_LABEL[timeKind]} : heure`} />
+              </div>
+            </div>
           )}
           <div className="tp-actions"><button className="btn-primary sm" onClick={save}>Enregistrer</button><button className="ghost-btn" onClick={() => setEditing(false)}>Annuler</button></div>
         </div>
@@ -1828,6 +1913,16 @@ a{text-decoration:none;color:inherit;}
 .rsvp-box{background:var(--card);border:2px solid var(--accent);border-radius:18px;padding:18px;margin:18px 0;box-shadow:0 8px 24px -14px var(--accent);}
 .rsvp-q{font-weight:800;font-family:'Bricolage Grotesque';font-size:21px;letter-spacing:-.02em;margin-bottom:14px;color:var(--ink);}
 .rsvp-btns{display:flex;gap:8px;}
+.nudge{margin:-6px 0 18px;}
+.nudge-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:44px;padding:11px 14px;border-radius:13px;border:1.5px solid var(--accent);background:var(--accent-soft);color:var(--accent);font-weight:700;font-size:14px;}
+.nudge-btn:disabled{border-color:var(--line);background:var(--card);color:var(--muted);cursor:default;}
+.nudge-hint{color:var(--muted);font-size:12.5px;line-height:1.45;margin:8px 2px 0;}
+.nudge-form{background:var(--card);border:1.5px solid var(--line);border-radius:16px;padding:12px 14px 14px;}
+.nudge-form .nudge-hint{margin:0 0 10px;}
+.nudge-form textarea{width:100%;padding:11px 13px;border:2px solid var(--line);border-radius:12px;font-size:16px;font-family:inherit;resize:none;outline:none;background:var(--card);}
+.nudge-form textarea:focus{border-color:var(--accent);}
+.nudge-form .field-err{margin:10px 0 0;}
+.nudge-acts{display:flex;justify-content:flex-end;gap:8px;margin-top:10px;}
 .rsvp-undo{color:var(--muted);font-size:12.5px;margin:11px 0 0;}
 .rsvp{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:12px 4px;border:2px solid var(--line);border-radius:13px;font-weight:600;font-size:12.5px;transition:.15s;background:var(--card);}
 .people{margin:16px 0;}
@@ -1873,7 +1968,8 @@ a{text-decoration:none;color:inherit;}
 .tp-at{display:block;font-size:12.5px;color:var(--muted);margin-top:2px;}
 .tp-time{display:flex;flex-direction:column;gap:6px;margin-top:8px;font-size:13.5px;font-weight:600;}
 .tp-time em{font-style:normal;font-weight:400;color:var(--muted);}
-.tp-time input{padding:11px 13px;border:2px solid var(--line);border-radius:12px;font-size:16px;font-family:inherit;background:var(--card);color:var(--ink);}
+.tp-when{display:grid;grid-template-columns:1.4fr 1fr;gap:8px;}
+.tp-time input{min-width:0;width:100%;-webkit-appearance:none;appearance:none;padding:11px 13px;border:2px solid var(--line);border-radius:12px;font-size:16px;font-family:inherit;background:var(--card);color:var(--ink);}
 /* Autocomplétion des lieux : la liste se superpose au reste du formulaire,
    d'où le position:relative sur le conteneur et le z-index sur la liste. */
 .ac{position:relative;}
