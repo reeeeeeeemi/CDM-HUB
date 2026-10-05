@@ -6,7 +6,7 @@ import {
   X, Trash2, Sparkles, Send, Wallet, MessageCircle, Link2,
   ExternalLink, MessageSquare, ListTodo, CheckCircle2, Circle, CalendarClock, Lock,
   Car, Plane, TrainFront, UserPlus, Navigation, CalendarX, AlertTriangle, CalendarPlus,
-  House, Map as MapIcon, MapPinned, ShoppingCart, BedDouble, Share2, Settings2, Pencil, BellRing, KeyRound, Building, Cake,
+  House, Map as MapIcon, MapPinned, ShoppingCart, BedDouble, Share2, Settings2, Pencil, BellRing, KeyRound, Building, Cake, Wifi,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ *
@@ -798,9 +798,9 @@ function Header({ meName, onSignOut, onHome, notifyCity, onSetCity }) {
         {open && (
           <>
             <div className="hd-backdrop" onClick={() => setOpen(false)} />
-            {/* Deux entrées, pas plus : ce menu sert à sortir vite, pas à
-                régler quoi que ce soit. Villes, notifications, compte et
-                invitations vivent maintenant sur /reglages. */}
+            {/* Ce menu sert à sortir vite, pas à régler quoi que ce soit.
+                Villes, notifications, compte et invitations vivent sur
+                /reglages, le carnet d'adresses sur /lieux. */}
             <div className="hd-menu" role="menu">
               <div className="hd-menu-me">{meName}</div>
 
@@ -816,6 +816,9 @@ function Header({ meName, onSignOut, onHome, notifyCity, onSetCity }) {
                 ))}
               </div>
 
+              <a className="hd-menu-link" href="/lieux">
+                <House size={15} /> Nos lieux
+              </a>
               <a className="hd-menu-link" href="/reglages">
                 <Settings2 size={15} /> Réglages
               </a>
@@ -978,11 +981,12 @@ function EventDetail({ ev, me, members, actions, availability, onBack, onEdit, p
         {ev.place && <div className="info-row"><MapPin size={18} /><div><b>{ev.place}</b></div></div>}
         {/* Un lieu du carnet : on lit ses infos à la source, toujours à jour
             si son propriétaire change le code. */}
-        {home && (home.address || home.doorCode || home.access) && (
+        {home && (home.address || home.doorCode || home.access || home.wifi) && (
           <div className="home-info">
             {home.address && <a href={mapsSearch(home.address)} target="_blank" rel="noopener noreferrer"><MapIcon size={14} /> {home.address}</a>}
             {home.doorCode && <span><KeyRound size={14} /> Code : <b>{home.doorCode}</b></span>}
             {home.access && <span><Building size={14} /> {home.access}</span>}
+            {home.wifi && <span className="home-wifi"><Wifi size={14} /> Wifi : <b>{home.wifi}</b></span>}
           </div>
         )}
 
@@ -1856,6 +1860,7 @@ a{text-decoration:none;color:inherit;}
 .hd-menu-link{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:14px;
   padding:12px;border-radius:12px;background:var(--accent);color:#fff;font-weight:700;font-size:14px;}
 .hd-menu-link:hover{filter:brightness(1.08);}
+.hd-menu-link + .hd-menu-link{margin-top:8px;}
 .hd-menu-out{margin-top:10px;}
 .hd-menu-out button{width:100%;padding:11px;border-radius:12px;background:var(--bg);
   font-family:inherit;font-weight:600;font-size:14px;color:var(--muted);}
@@ -2036,6 +2041,7 @@ a{text-decoration:none;color:inherit;}
 .home-info a,.home-info span{display:flex;align-items:center;gap:8px;color:var(--ink);}
 .home-info a{text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px;}
 .home-info svg{flex-shrink:0;color:var(--muted);}
+.home-wifi b{word-break:break-all;}
 .poll-home{color:var(--accent);vertical-align:-2px;margin-right:5px;}
 .bday{display:flex;align-items:center;gap:9px;margin-bottom:12px;padding:12px 14px;border-radius:14px;background:var(--accent-soft);color:var(--ink);font-size:14px;}
 .bday svg{flex-shrink:0;color:var(--accent);}

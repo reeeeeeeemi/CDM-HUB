@@ -9,13 +9,15 @@ import { createClient } from "@/lib/supabase/server";
  * propriétaire : ces actions ne font que relayer, et remonter le refus.
  */
 
-export type PlaceInput = { name: string; address: string; doorCode: string; access: string };
+export type PlaceInput = { name: string; address: string; doorCode: string; access: string; wifi: string; city: string };
 
 const row = (p: PlaceInput) => ({
   name: p.name.trim(),
   address: p.address.trim() || null,
   door_code: p.doorCode.trim() || null,
   access: p.access.trim() || null,
+  wifi: p.wifi.trim() || null,
+  city: p.city.trim() || null,
 });
 
 export async function savePlace(id: string | null, place: PlaceInput) {

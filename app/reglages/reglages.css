@@ -16,7 +16,9 @@
 .rg-back:hover{background:var(--accent);color:#fff;}
 .rg-head h1{font-family:'Bricolage Grotesque',system-ui,sans-serif;font-size:29px;font-weight:800;letter-spacing:-.8px;line-height:1;}
 
-.rg-flash{background:#ECFDF5;color:#047857;border-radius:10px;padding:9px 12px;font-size:13px;font-weight:600;margin-bottom:12px;}
+.rg-flash{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom));z-index:10;
+  background:var(--ink);color:#fff;border-radius:12px;padding:10px 16px;font-size:13.5px;font-weight:600;
+  box-shadow:0 8px 24px rgba(0,0,0,.18);white-space:nowrap;}
 .rg-err{background:#FEF2F2;color:#B91C1C;border-radius:10px;padding:9px 12px;font-size:13px;line-height:1.45;margin-bottom:12px;word-break:break-all;}
 
 .rg-sec{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px;}
@@ -32,16 +34,29 @@
 .rg-chip.on{background:var(--ink);color:#fff;border-color:var(--ink);}
 
 .rg-list{display:flex;flex-direction:column;}
-.rg-row{display:flex;align-items:flex-start;gap:10px;padding:10px 2px;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);}
+/* Une ligne par règle, l'interrupteur à droite : la liste se lit d'un coup
+   d'œil, sans paragraphe d'explication sous chaque case. */
+.rg-row{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:46px;padding:4px 2px;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);font-size:14px;font-weight:500;color:var(--muted);}
 .rg-row:last-child{border-bottom:0;}
-.rg-row b{display:block;font-size:13.5px;font-weight:600;color:var(--muted);}
-.rg-row.on b{color:var(--ink);}
-.rg-row em{display:block;font-style:normal;color:var(--muted);font-size:12px;line-height:1.45;margin-top:2px;}
-.rg-box{flex-shrink:0;margin-top:1px;width:19px;height:19px;border-radius:6px;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;color:#fff;}
-.rg-row.on .rg-box{background:var(--accent);border-color:var(--accent);}
+.rg-row.on{color:var(--ink);}
+.rg-switch{flex-shrink:0;position:relative;width:42px;height:25px;border-radius:13px;background:var(--line);border:0;transition:background .15s;}
+.rg-switch::after{content:"";position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2);transition:transform .15s;}
+.rg-switch.on{background:var(--accent);}
+.rg-switch.on::after{transform:translateX(17px);}
+.rg-switch:disabled{opacity:.5;}
+.rg-sec-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
+.rg-sec-head h2{margin-bottom:0;}
 
 .rg-field{display:block;margin-bottom:10px;}
-.rg-field span{display:block;font-size:12.5px;font-weight:700;margin-bottom:5px;}
+.rg-field>span{display:block;font-size:12.5px;font-weight:700;margin-bottom:5px;}
+.rg-field>span em{font-style:normal;font-weight:500;color:var(--muted);}
+.rg-inline{display:flex;gap:8px;}
+.rg-inline input{flex:1;min-width:0;}
+.rg-btn.sm{width:auto;flex-shrink:0;padding:0 16px;}
+/* iOS dessine le champ date à sa façon : centré, plus bas que ses voisins.
+   On le ramène à la même hauteur et au même alignement que les autres. */
+.rg-field input[type="date"]{-webkit-appearance:none;appearance:none;min-height:48px;text-align:left;}
+.rg-field input[type="date"]::-webkit-date-and-time-value{text-align:left;}
 /* 16px : en deçà, iOS zoome à la mise au point du champ. */
 .rg-field input{width:100%;padding:12px 14px;border:2px solid var(--line);border-radius:12px;font-size:16px;font-family:inherit;background:var(--card);color:var(--ink);outline:none;}
 .rg-field input:focus{border-color:var(--accent);}
@@ -50,23 +65,3 @@
 .rg-person{padding:6px 12px;border-radius:20px;background:var(--bg);border:1px solid var(--line);font-size:13px;font-weight:600;}
 .rg-person em{font-style:normal;color:var(--muted);font-weight:500;}
 
-.rg-field span svg{vertical-align:-2px;margin-right:3px;}
-.rg-btn svg{vertical-align:-2px;margin-right:4px;}
-
-/* Le carnet des lieux */
-.rg-places{display:flex;flex-direction:column;gap:8px;margin-bottom:10px;}
-.rg-place{border:1px solid var(--line);border-radius:12px;padding:11px 13px;background:var(--bg);display:flex;flex-direction:column;gap:5px;}
-.rg-place.editing{background:var(--card);border-color:var(--accent);}
-.rg-place-head{display:flex;align-items:baseline;gap:8px;}
-.rg-place-head b{font-size:14.5px;}
-.rg-place-head em{font-style:normal;color:var(--muted);font-size:12.5px;margin-left:auto;}
-.rg-place-line{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink);}
-.rg-place-line svg{flex-shrink:0;color:var(--muted);}
-a.rg-place-line{text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px;}
-.rg-place-acts{display:flex;gap:8px;margin-top:4px;}
-.rg-place-acts button{display:inline-flex;align-items:center;gap:5px;min-height:40px;padding:8px 12px;border-radius:10px;border:1.5px solid var(--line);background:var(--card);font-weight:600;font-size:13px;color:var(--ink);}
-.rg-place-acts button.danger{color:#B91C1C;}
-.rg-place-acts button.primary{margin-left:auto;background:var(--accent);border-color:var(--accent);color:#fff;}
-.rg-place-acts button:disabled{opacity:.5;}
-.rg-row2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
-.rg-row2 .rg-field input{min-width:0;}
