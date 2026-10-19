@@ -5,7 +5,9 @@
 // Retour du navigateur y ramènerait après la connexion.
 import { redirect, RedirectType } from "next/navigation";
 import { headers } from "next/headers";
+import { createClient as createImplicitClient } from "@supabase/supabase-js";
 
+import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
 
 export type AuthState = { error?: string; notice?: string };
@@ -100,11 +102,15 @@ export async function requestReset(_prev: AuthState, formData: FormData): Promis
 
   const origin = (await headers()).get("origin") ?? "";
 
-  const supabase = await createClient();
+  // Flux "implicit", pas le PKCE du client serveur : un lien PKCE ne marche
+  // que dans le navigateur qui l'a demandé, et les emails utilisent le modèle
+  // par défaut de Supabase (non modifiable sans SMTP perso). Le lien renvoie
+  // ici avec la session après le #, que LoginForm lit et installe.
+  const supabase = createImplicitClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { flowType: "implicit", persistSession: false },
+  });
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    // La route /auth/confirm reconnaît le type "recovery" et bascule
-    // vers l'écran de saisie du nouveau mot de passe.
-    redirectTo: `${origin}/auth/confirm`,
+    redirectTo: origin,
   });
 
   if (error) return { error: readable(error.message) };

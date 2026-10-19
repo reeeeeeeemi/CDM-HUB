@@ -5,11 +5,39 @@ import { KeyRound, PartyPopper, Send } from "lucide-react";
 
 import { requestReset, signIn, signUp, type AuthState } from "./actions";
 import { APP_NAME, GROUP, TAGLINE } from "@/lib/brand";
+import { createClient } from "@/lib/supabase/client";
 import "./login.css";
 
 const EMPTY: AuthState = {};
 
 type Mode = "in" | "up" | "forgot";
+
+/**
+ * Les liens magiques et de réinitialisation (modèles Supabase par défaut,
+ * non modifiables sans SMTP perso) renvoient vers la racine avec la session
+ * après le #. Le serveur ne voit jamais cette partie : proxy.ts redirige donc
+ * ici, le navigateur garde le #, et c'est ici qu'on installe la session.
+ *
+ * Renvoie true si le lien était là mais n'a pas servi.
+ */
+async function openSessionFromLink(next: string) {
+  const hash = new URLSearchParams(window.location.hash.slice(1));
+  const access_token = hash.get("access_token");
+  const refresh_token = hash.get("refresh_token");
+  if (!hash.get("error") && (!access_token || !refresh_token)) return false;
+
+  // Retire les jetons de la barre d'adresse et de l'historique.
+  history.replaceState(null, "", window.location.pathname + window.location.search);
+  if (!access_token || !refresh_token) return true;
+
+  const { error } = await createClient().auth.setSession({ access_token, refresh_token });
+  if (error) return true;
+
+  // Un lien de récupération ouvre une session, mais il reste à choisir un mot
+  // de passe qu'on connaît.
+  window.location.replace(hash.get("type") === "recovery" ? "/auth/reset" : next || "/");
+  return false;
+}
 
 export function LoginForm({ next = "" }: { next?: string }) {
   const [mode, setMode] = useState<Mode>("in");
@@ -25,6 +53,13 @@ export function LoginForm({ next = "" }: { next?: string }) {
     window.addEventListener("pageshow", onShow);
     return () => window.removeEventListener("pageshow", onShow);
   }, []);
+
+  const [linkError, setLinkError] = useState("");
+  useEffect(() => {
+    openSessionFromLink(next).then((failed) => {
+      if (failed) setLinkError("Ce lien a expiré ou a déjà servi. Redemande-en un.");
+    });
+  }, [next]);
 
   const [inState, inAction, inPending] = useActionState(signIn, EMPTY);
   const [upState, upAction, upPending] = useActionState(signUp, EMPTY);
@@ -129,6 +164,11 @@ export function LoginForm({ next = "" }: { next?: string }) {
           </div>
         )}
 
+        {linkError && !state.error && !state.notice && (
+          <p className="auth-msg err" role="alert">
+            {linkError}
+          </p>
+        )}
         {state.error && (
           <p className="auth-msg err" role="alert">
             {state.error}
