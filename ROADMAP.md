@@ -87,3 +87,43 @@ La ville quitte le menu rapide : avec plusieurs villes ça devient une liste
 - Date moins grasse dans les sondages
 - Bouton **« Ajouter à mon agenda »**, explicite : aujourd'hui on ne comprend
   pas ce qu'il fait
+
+---
+
+# Après le multi-groupes
+
+Décisions arrêtées avec Rémi le 20 octobre 2026, à faire **après l'étape 3**
+(réglages d'admin) et sa mise en prod. Prototype jetable des pistes sur la
+branche `prototype/accueil` (`?variant=B|C|D` sur l'accueil).
+
+## F — Un accueil plus léger
+
+Avec une vingtaine d'events, la liste devient lourde : sept informations par
+carte, la date noyée en deuxième ligne, rien ne distingue ce qui attend un
+geste.
+
+**« À toi de jouer »**, en tête de l'accueil
+- les events à venir sans ta réponse, et les sondages de date ou de lieu où
+  tu n'as pas voté — un seul motif par event, le plus urgent
+- **tous tes groupes**, l'emoji du groupe sur chaque ligne ; toucher ouvre
+  l'event dans son groupe
+- un « peut-être » est une réponse : il n'y revient pas
+
+**La liste devient un agenda**, celle du **groupe ouvert**
+- une seule liste : plus d'onglets Big events / Au quotidien, le big event se
+  repère à ✨ et à sa durée
+- intercalaires **« Cette semaine »**, puis un par mois
+- une ligne par event : la date en gros à gauche, une ligne de détails
+  (catégorie, ville, heure, nombre de chauds), et **ta réponse** en pastille
+  à droite
+- les villes restent un filtre, ouvert sur **« Toutes »**
+- les dates à voter à la fin, le passé replié
+
+**Un calendrier perso**, derrière une bascule **Liste / Calendrier**
+- **tous tes groupes** : c'est ton agenda, pas celui d'un groupe
+- un mois en grille, semaine du lundi ; chaque event en barre sur toute sa
+  durée, colorée par ta réponse : **vert** j'y vais, **orange** peut-être,
+  **rouge** pas dispo, **gris pointillé** sans réponse
+- toucher un jour liste ses events dessous ; « Seulement mes plans » ne
+  garde que le vert et l'orange
+- les anniversaires en 🎂 sur la case, sans barre
