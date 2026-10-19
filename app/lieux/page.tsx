@@ -21,7 +21,9 @@ export default async function Page() {
   // Le carnet du groupe — ses lieux, et le chez-soi de chacun —, les pseudos
   // d'ici pour dire chez qui, et combien d'events à venir s'y tiennent : on
   // prévient avant d'en supprimer un qui sert encore.
-  const today = new Date().toISOString().slice(0, 10);
+  // Le jour à Paris : le serveur tourne en UTC, où l'on est encore la veille
+  // entre minuit et deux heures.
+  const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Paris" });
   const [{ data: placeRows }, { data: names }, { data: gone }, { data: used }] = await Promise.all([
     supabase.rpc("group_places", { g: group.id })
       .select("id, owner_id, name, address, door_code, access, wifi_name, wifi_password, city, is_home").order("name"),

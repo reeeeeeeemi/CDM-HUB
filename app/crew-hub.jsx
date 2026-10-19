@@ -111,7 +111,11 @@ const uid = () => {
   return `${h.slice(0, 4).join("")}-${h.slice(4, 6).join("")}-${h.slice(6, 8).join("")}-${h.slice(8, 10).join("")}-${h.slice(10, 16).join("")}`;
 };
 const normUrl = (u) => (!u ? "" : /^https?:\/\//i.test(u) ? u : "https://" + u);
-const todayStr = () => new Date().toISOString().slice(0, 10);
+// Toujours le jour local : toISOString donne celui de Londres, et entre
+// minuit et deux heures du matin à Paris on était encore la veille.
+const pad2 = (n) => String(n).padStart(2, "0");
+const localIso = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const todayStr = () => localIso(new Date());
 const isPastEvent = (e) => Boolean((e.endDate || e.date) && (e.endDate || e.date) < todayStr());
 
 const mapsSearch = (address) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
@@ -147,19 +151,39 @@ function fmtRange(start, end) {
   if (!end || end === start) return fmtDate(start);
   return `Du ${shortDate(start)} au ${shortDate(end)}`;
 }
-function countdown(start, end, time) {
+// Un jour du calendrier en nombre entier : midi UTC n'a pas de changement
+// d'heure, la différence de deux dates tombe donc toujours juste.
+const dayNumber = (iso) => { const [y, m, d] = iso.split("-").map(Number); return Date.UTC(y, m - 1, d) / 864e5; };
+
+/**
+ * Le compte à rebours d'un event.
+ *
+ * En jours du calendrier, pas en tranches de 24 h : mardi soir, un apéro de
+ * jeudi est à J-2, et un plan de demain matin est « Demain ». La fin compte
+ * aussi : une soirée de 19 h à 22 h n'est plus « En cours » à 23 h, et une
+ * heure de fin plus petite que celle du début tombe le lendemain.
+ */
+function countdown(start, end, time, endTime) {
   if (!start) return null;
-  const s = new Date(start + "T" + (time || "00:00"));
-  const e = new Date((end || start) + "T23:59");
   const now = new Date();
-  if (now < s) {
-    const diff = s - now, days = Math.floor(diff / 86400000), hours = Math.floor((diff % 86400000) / 3600000);
-    if (days > 0) return { text: `J-${days}` };
-    if (hours > 0) return { text: `Dans ${hours} h` };
-    return { text: "Aujourd'hui !", soon: true };
+  const startAt = new Date(`${start}T${time || "00:00"}`);
+  let endAt;
+  if (!end && time && endTime) {
+    endAt = new Date(`${start}T${endTime}`);
+    if (endTime <= time) endAt.setDate(endAt.getDate() + 1);
+  } else {
+    endAt = new Date(`${end || start}T23:59:59`);
   }
-  if (now >= s && now <= e) return { text: "En cours", live: true };
-  return { past: true, text: "Passé" };
+  if (now > endAt) return { past: true, text: "Passé" };
+  // Sans heure, un plan d'un jour n'est pas « en cours » dès minuit.
+  if (now >= startAt && (time || (end && end !== start))) return { text: "En cours", live: true };
+  const days = dayNumber(start) - dayNumber(todayStr());
+  if (days >= 2) return { text: `J-${days}` };
+  if (days === 1) return { text: time ? `Demain · ${time}` : "Demain" };
+  if (!time) return { text: "Aujourd'hui !", soon: true };
+  const mins = Math.round((startAt - now) / 60000);
+  if (mins > 90) return { text: `Aujourd'hui · ${time}`, soon: true };
+  return { text: `Dans ${Math.max(1, mins)} min`, soon: true };
 }
 function timeAgo(ms) {
   if (!ms) return "";
@@ -193,7 +217,9 @@ function toICSDate(date, time, allDay) {
   const t = (time || "00:00").replace(":", "") + "00";
   return date.replace(/-/g, "") + "T" + t;
 }
-function addDay(date) { const x = new Date(date + "T00:00:00"); x.setDate(x.getDate() + 1); return x.toISOString().slice(0, 10); }
+// Le jour local, encore : en UTC le lendemain d'un jour retombait sur lui-même,
+// et un week-end exporté dans l'agenda s'arrêtait un jour trop tôt.
+function addDay(date) { const x = new Date(date + "T00:00:00"); x.setDate(x.getDate() + 1); return localIso(x); }
 function icsContent(ev) {
   const allDay = ev.scale === "big" || !ev.time;
   const start = ev.date;
@@ -946,7 +972,7 @@ function EventsView({ data, me, onOpen, scale }) {
 function EventCard({ ev, me, onOpen, past }) {
   const cat = categoryOf(ev.category);
   const cities = useCities();
-  const cd = countdown(ev.date, ev.endDate, ev.time);
+  const cd = countdown(ev.date, ev.endDate, ev.time, ev.endTime);
   const going = Object.values(ev.rsvps || {}).filter((s) => s === "in").length;
   const mine = ev.rsvps?.[me];
   const noDate = !ev.date;
@@ -1013,7 +1039,7 @@ function EventDetail({ ev, me, members, actions, onBack, onEdit, places, savedPl
     } catch {}
   };
   const cat = categoryOf(ev.category);
-  const cd = countdown(ev.date, ev.endDate, ev.time);
+  const cd = countdown(ev.date, ev.endDate, ev.time, ev.endTime);
   const groups = { in: [], maybe: [], out: [] };
   Object.entries(ev.rsvps || {}).forEach(([n, s]) => groups[s]?.push(n));
   const mine = ev.rsvps?.[me];
