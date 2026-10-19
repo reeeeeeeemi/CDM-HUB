@@ -780,12 +780,13 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
                 {birthdaysToday(BIRTHDAYS).map((b) => (
                   <div className="bday" key={b.id}><Cake size={17} /> C&apos;est l&apos;anniv de <b>{nameOf(b.id)}</b> aujourd&apos;hui, {b.age} ans 🎉</div>
                 ))}
-                {variant !== "C" && <div className="seg">
+                {/* PROTOTYPE — plus d'onglets big / quotidien hors de l'actuel. */}
+                {variant === "A" && <div className="seg">
                   <button className={scale === "big" ? "on" : ""} onClick={() => setScale("big")}><Sparkles size={15} /> Big events</button>
                   <button className={scale === "daily" ? "on" : ""} onClick={() => setScale("daily")}>Au quotidien</button>
                 </div>}
                 {/* Un groupe sans villes n'a pas de filtre : tout s'affiche. */}
-                {variant !== "C" && cities.list.length > 0 && (
+                {variant !== "C" && variant !== "E" && cities.list.length > 0 && (
                   <div className="cities">
                     <button className={"citychip" + (city === "all" ? " on" : "")} onClick={() => pickCity("all")}>Toutes</button>
                     {cityChips.map((c) => (
@@ -796,7 +797,8 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
                   </div>
                 )}
                 {variant === "A" ? <EventsView data={filtered} me={me} onOpen={openEvent} scale={scale} />
-                  : <HubPrototype variant={variant} events={events} filtered={[...filtered.up, ...filtered.past]} me={me} group={group} onOpen={openEvent} />}
+                  : <HubPrototype variant={variant} events={events} me={me} group={group} onOpen={openEvent}
+                      filtered={events.filter((e) => cityBig === "all" || e.city === cityBig)} />}
           </main>
           <button className="fab" onClick={() => setModal("event")}>
             <Plus size={22} strokeWidth={2.4} />

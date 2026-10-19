@@ -12,6 +12,10 @@
  *    B  Agenda : « À toi de jouer », puis intercalaires par mois
  *    C  Calendrier perso : le mois, coloré selon ta réponse
  *    D  Bandeau + agenda : 5 semaines en frise, l'agenda dessous
+ *    E  Liste / Calendrier : B et C derrière une bascule
+ *
+ *  Plus d'onglets big / quotidien hors de A : une seule liste. Un event
+ *  refusé quitte le calendrier, mais reste dans la liste pour se raviser.
  *
  *  Visible en dev et sur les versions de test, jamais en prod.
  * ==================================================================== */
@@ -23,6 +27,7 @@ import { categoryOf } from "@/lib/catalog";
 import { cityEmoji } from "@/lib/group";
 
 export const VARIANTS = [
+  ["E", "Liste / Calendrier"],
   ["A", "Actuel"],
   ["B", "Agenda"],
   ["C", "Calendrier perso"],
@@ -180,11 +185,26 @@ function Agenda({ events, me, group, onOpen, anchors = false }) {
 }
 
 // ---------- B : agenda ----------
-function VariantB({ events, filtered, me, group, onOpen }) {
+function VariantB({ events, filtered, me, group, onOpen, toPlay = true }) {
   return (
     <>
-      <ToPlay events={events} me={me} onOpen={onOpen} />
+      {toPlay && <ToPlay events={events} me={me} onOpen={onOpen} />}
       <Agenda events={filtered} me={me} group={group} onOpen={onOpen} />
+    </>
+  );
+}
+
+// ---------- E : B et C derrière une bascule ----------
+function VariantE(props) {
+  const [tab, setTab] = useState("list");
+  return (
+    <>
+      <ToPlay events={props.events} me={props.me} onOpen={props.onOpen} />
+      <div className="seg px-tabs">
+        <button className={tab === "list" ? "on" : ""} onClick={() => setTab("list")}>Liste</button>
+        <button className={tab === "cal" ? "on" : ""} onClick={() => setTab("cal")}>Calendrier</button>
+      </div>
+      {tab === "list" ? <VariantB {...props} toPlay={false} /> : <VariantC {...props} toPlay={false} />}
     </>
   );
 }
@@ -210,11 +230,14 @@ function lanesFor(events, weekStart) {
   return lanes;
 }
 
-function VariantC({ events, me, group, onOpen }) {
+function VariantC({ events, me, group, onOpen, toPlay = true }) {
   const [mine, setMine] = useState(false);
   const [month, setMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [day, setDay] = useState(todayIso());
-  const shown = mine ? events.filter((e) => ["in", "maybe"].includes(answerOf(e, me))) : events;
+  // Un refus quitte le calendrier : il ne dit rien de ton emploi du temps.
+  // L'event reste dans la liste, où l'on peut changer d'avis.
+  const notOut = events.filter((e) => answerOf(e, me) !== "out");
+  const shown = mine ? notOut.filter((e) => answerOf(e, me) === "in" || answerOf(e, me) === "maybe") : notOut;
 
   const first = mondayOf(month);
   const last = addDays(new Date(month.getFullYear(), month.getMonth() + 1, 1), -1);
@@ -227,7 +250,7 @@ function VariantC({ events, me, group, onOpen }) {
 
   return (
     <>
-      <ToPlay events={events} me={me} onOpen={onOpen} />
+      {toPlay && <ToPlay events={events} me={me} onOpen={onOpen} />}
       <section className="px-cal">
         <div className="px-cal-head">
           <button aria-label="Mois précédent" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}><ChevronLeft size={18} /></button>
@@ -235,7 +258,7 @@ function VariantC({ events, me, group, onOpen }) {
           <button aria-label="Mois suivant" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}><ChevronRight size={18} /></button>
         </div>
         <div className="px-legend">
-          {["in", "maybe", "out", "none"].map((k) => (
+          {["in", "maybe", "none"].map((k) => (
             <span key={k}><i style={{ background: k === "none" ? "transparent" : ANSWER[k].color, borderColor: ANSWER[k].color }} />{ANSWER[k].label}</span>
           ))}
         </div>
@@ -343,6 +366,7 @@ export default function HubPrototype({ variant, ...props }) {
       {variant === "B" && <VariantB {...props} />}
       {variant === "C" && <VariantC {...props} />}
       {variant === "D" && <VariantD {...props} />}
+      {variant === "E" && <VariantE {...props} />}
     </div>
   );
 }
@@ -431,6 +455,7 @@ const CSS = `
 .px-bar.cl{border-top-left-radius:0;border-bottom-left-radius:0;margin-left:0;}
 .px-bar.cr{border-top-right-radius:0;border-bottom-right-radius:0;margin-right:0;}
 .px-dayl{margin-top:6px;}
+.px-tabs{margin:0 0 14px;}
 
 .px-strip{display:flex;align-items:flex-end;gap:5px;overflow-x:auto;margin:0 -18px 6px;padding:2px 18px 8px;scrollbar-width:none;}
 .px-strip::-webkit-scrollbar{display:none;}
