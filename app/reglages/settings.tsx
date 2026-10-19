@@ -13,6 +13,7 @@ type Prefs = Record<string, boolean>;
 type Props = {
   viewer: { id: string; email: string; pseudo: string };
   group: { name: string; cities: City[] };
+  isAdmin: boolean;
   muted: boolean;
   onSetMuted: (muted: boolean) => Promise<{ error?: string }>;
   members: Member[];
@@ -27,7 +28,7 @@ type Props = {
 };
 
 export default function Settings({
-  viewer, group, muted, onSetMuted, members, cities, prefs, birthday,
+  viewer, group, isAdmin, muted, onSetMuted, members, cities, prefs, birthday,
   onSetCities, onSetPrefs, onSetPseudo, onSetBirthday, onInvite,
 }: Props) {
   const push = usePush();
@@ -136,7 +137,10 @@ export default function Settings({
       </section>
 
       <section className="rg-sec">
-        <h2><Users size={16} /> {group.name} · {members.length}</h2>
+        <div className="rg-sec-head">
+          <h2><Users size={16} /> {group.name} · {members.length}</h2>
+          <Link className="rg-link" href="/groupe">{isAdmin ? "Gérer" : "Voir"} →</Link>
+        </div>
         <div className="rg-people">
           {members.map((m) => (
             <span className="rg-person" key={m.id}>

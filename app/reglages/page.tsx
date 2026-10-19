@@ -44,6 +44,7 @@ export default async function Page() {
     <Settings
       viewer={viewer}
       group={{ name: group.name, cities: group.cities }}
+      isAdmin={viewer.role === "admin"}
       muted={viewer.muted}
       onSetMuted={setGroupMuted.bind(null, group.id)}
       members={members}

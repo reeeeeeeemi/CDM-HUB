@@ -4,11 +4,12 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { ChevronLeft, Users, MapPin, Shapes } from "lucide-react";
 
-import { CATEGORIES, FAMILIES, MAX_CATEGORIES, MIN_CATEGORIES } from "@/lib/catalog";
+import { MIN_CATEGORIES } from "@/lib/catalog";
 import type { City } from "@/lib/group";
 import type { NewGroup } from "@/lib/actions/group";
 
-import CitySearch from "./city-search";
+import CitySearch from "../city-search";
+import CategoryPicker from "../category-picker";
 
 type Props = {
   /** Le dernier pseudo utilisé, proposé d'office. */
@@ -32,11 +33,6 @@ export default function NewGroupForm({ pseudo, canGoBack, onCreate }: Props) {
   const [picked, setPicked] = useState<string[]>([]);
   const [err, setErr] = useState("");
   const [pending, start] = useTransition();
-
-  const full = picked.length >= MAX_CATEGORIES;
-
-  const toggle = (k: string) =>
-    setPicked((p) => (p.includes(k) ? p.filter((x) => x !== k) : full ? p : [...p, k]));
 
   // Le bouton dit ce qui manque, plutôt que de rester grisé sans raison.
   const missing = !name.trim()
@@ -94,28 +90,7 @@ export default function NewGroupForm({ pseudo, canGoBack, onCreate }: Props) {
 
       <section className="rg-sec">
         <h2><Shapes size={16} /> Ce que vous faites ensemble</h2>
-        <p className="rg-hint">
-          De {MIN_CATEGORIES} à {MAX_CATEGORIES} catégories — « Autre » s&apos;y ajoute toujours.{" "}
-          <b className={"ng-count" + (picked.length >= MIN_CATEGORIES ? " ok" : "")}>{picked.length} choisie{picked.length > 1 ? "s" : ""}</b>
-        </p>
-        {FAMILIES.map((f) => (
-          <div className="ng-family" key={f.label}>
-            <h3>{f.label}</h3>
-            <div className="rg-chips">
-              {f.keys.map((k) => {
-                const c = CATEGORIES[k];
-                const on = picked.includes(k);
-                return (
-                  <button key={k} type="button" aria-pressed={on} disabled={!on && full}
-                    className={"ng-cat" + (on ? " on" : "")} style={{ "--c": c.color } as React.CSSProperties}
-                    onClick={() => toggle(k)}>
-                    {c.emoji} {c.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+        <CategoryPicker picked={picked} onChange={setPicked} />
       </section>
 
       <div className="ng-foot">

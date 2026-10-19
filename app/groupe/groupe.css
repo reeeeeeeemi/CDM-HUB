@@ -1,0 +1,31 @@
+/* La page d'un groupe — s'appuie sur reglages.css et groupes.css. */
+
+.gp-edit{display:flex;align-items:center;gap:5px;padding:6px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);
+  font-size:12.5px;font-weight:700;color:var(--ink);}
+.gp-acts{display:flex;gap:8px;margin-top:12px;}
+.gp-acts .rg-btn{flex:1;}
+.rg-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+.rg-btn.danger{color:#B91C1C;border-color:#FECACA;background:#FEF2F2;}
+.rg-btn.danger:disabled{opacity:.45;}
+
+.gp-id{display:flex;align-items:center;gap:12px;}
+.gp-badge{flex-shrink:0;display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:15px;background:var(--bg);
+  font-family:'Bricolage Grotesque';font-weight:800;font-size:22px;}
+.gp-id b{font-family:'Bricolage Grotesque';font-size:18px;font-weight:800;}
+.gp-id p{color:var(--muted);font-size:13.5px;line-height:1.45;margin-top:2px;}
+
+.gp-members{display:flex;flex-direction:column;}
+.gp-member{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);}
+.gp-member:last-child{border-bottom:0;}
+.gp-av{flex-shrink:0;display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:var(--ink);color:#fff;
+  font-family:'Bricolage Grotesque';font-weight:700;font-size:12px;}
+.gp-name{flex:1;min-width:0;display:flex;align-items:center;flex-wrap:wrap;gap:6px;font-weight:600;font-size:14.5px;}
+.gp-name em{font-style:normal;font-weight:500;color:var(--muted);}
+.gp-admin{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:8px;background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:700;}
+.gp-macts{display:flex;gap:6px;flex-shrink:0;}
+.gp-macts button{padding:6px 9px;border-radius:9px;border:1px solid var(--line);background:var(--bg);font-size:12px;font-weight:600;color:var(--ink);}
+.gp-macts button.danger{color:#B91C1C;}
+
+.gp-danger{background:transparent;border-style:dashed;}
+.gp-dacts{display:flex;flex-direction:column;gap:8px;}
+.gp-dacts .rg-btn{display:flex;align-items:center;justify-content:center;gap:7px;}
