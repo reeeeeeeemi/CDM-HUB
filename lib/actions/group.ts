@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
-import { GROUP_COOKIE } from "@/lib/group";
+import { GROUP_COOKIE, type City } from "@/lib/group";
+import { CATEGORIES, MAX_CATEGORIES, MIN_CATEGORIES } from "@/lib/catalog";
 import { COOKIE_OPTIONS } from "@/lib/supabase/env";
 
 async function setGroupCookie(groupId: string) {
@@ -64,6 +65,50 @@ export async function joinGroup(
   // Membre désormais : la politique laisse lire l'invitation, et donc son groupe.
   const { data: inv } = await supabase.from("invites").select("group_id").eq("id", token).single();
   if (inv?.group_id) await setGroupCookie(inv.group_id);
+  redirect("/");
+}
+
+export type NewGroup = {
+  name: string;
+  emoji: string;
+  tagline: string;
+  pseudo: string;
+  cities: City[];
+  categories: string[];
+};
+
+/**
+ * Créer un groupe et y entrer comme admin. La base tranche le reste —
+ * cinq groupes au plus par compte, de 3 à 10 catégories — et son refus
+ * remonte tel quel jusqu'au formulaire.
+ */
+export async function createGroup(g: NewGroup): Promise<{ error?: string }> {
+  const name = g.name.trim();
+  if (!name) return { error: "Donne un nom au groupe." };
+  if (name.length > 40) return { error: "Quarante caractères maximum pour le nom." };
+
+  // Seules les clés du catalogue, sans « Autre », toujours offerte en plus.
+  const categories = [...new Set(g.categories)].filter((k) => CATEGORIES[k] && k !== "autre");
+  if (categories.length < MIN_CATEGORIES || categories.length > MAX_CATEGORIES) {
+    return { error: `Choisis de ${MIN_CATEGORIES} à ${MAX_CATEGORIES} catégories.` };
+  }
+
+  const cities = g.cities
+    .map((c) => ({ name: c.name.trim(), emoji: c.emoji.trim() || "📍" }))
+    .filter((c, i, all) => c.name && all.findIndex((x) => x.name.toLowerCase() === c.name.toLowerCase()) === i);
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("create_group", {
+    name,
+    categories,
+    pseudo: g.pseudo.trim(),
+    emoji: g.emoji.trim() || null,
+    tagline: g.tagline.trim() || null,
+    cities,
+  });
+  if (error) return { error: error.message };
+
+  await setGroupCookie(data as string);
   redirect("/");
 }
 

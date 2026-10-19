@@ -1,0 +1,32 @@
+/* Nouveau groupe — s'appuie sur les variables et les champs de reglages.css. */
+
+/* L'emoji tient dans une case carrée, à gauche du champ qu'il illustre. */
+.ng-name{display:flex;gap:8px;align-items:flex-end;}
+.ng-name>.rg-field:last-child,.ng-name>input:not(.ng-emoji){flex:1;min-width:0;}
+.ng-emoji{width:64px;flex-shrink:0;}
+.ng-emoji input,input.ng-emoji{text-align:center;}
+.ng-name>input{padding:12px 14px;border:2px solid var(--line);border-radius:12px;font-size:16px;font-family:inherit;background:var(--card);color:var(--ink);outline:none;}
+.ng-name>input:focus{border-color:var(--accent);}
+.ng-name .rg-btn.sm{min-height:48px;display:flex;align-items:center;}
+
+.ng-opt{font-style:normal;font-weight:500;font-size:13px;color:var(--muted);font-family:Inter,system-ui,sans-serif;}
+.ng-cities{margin-bottom:10px;}
+.ng-city{display:inline-flex;align-items:center;gap:6px;}
+.ng-city button{display:flex;border:0;background:none;color:inherit;padding:0;opacity:.8;}
+
+.ng-count{font-weight:700;color:var(--accent);}
+.ng-count.ok{color:#0F766E;}
+
+.ng-family{margin-top:14px;}
+.ng-family h3{font-size:12.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:0 0 7px;}
+/* La couleur de la catégorie, dès qu'on la choisit : on voit déjà le hub. */
+.ng-cat{padding:8px 13px;border-radius:20px;border:2px solid color-mix(in srgb, var(--c) 30%, transparent);background:var(--card);
+  color:var(--c);font-weight:600;font-size:13px;transition:.12s;}
+.ng-cat.on{background:var(--c);border-color:var(--c);color:#fff;}
+.ng-cat:disabled{opacity:.35;}
+
+/* Le bouton reste en bas de l'écran : la liste des catégories est longue. */
+.ng-foot{position:sticky;bottom:0;padding:10px 0 calc(6px + env(safe-area-inset-bottom));
+  background:linear-gradient(to top, var(--bg) 70%, transparent);}
+.ng-submit{width:100%;min-height:52px;border:0;border-radius:14px;background:var(--accent);color:#fff;font-weight:700;font-size:15.5px;}
+.ng-submit:disabled{background:var(--line);color:var(--muted);}

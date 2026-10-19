@@ -24,7 +24,7 @@ import { nameOf, BIRTHDAYS } from "@/lib/hub-data";
 import { APP_NAME } from "@/lib/brand";
 import { categoryOf, groupCategories, CATEGORIES } from "@/lib/catalog";
 import { cityEmoji as cityEmojiIn, groupBadge } from "@/lib/group";
-import { rememberGroup } from "@/lib/actions/group";
+import { rememberGroup, openGroup } from "@/lib/actions/group";
 import { notifyNewEvent, notifyEventActivity, notifyAttendees, nudgeEvent } from "@/lib/actions/push";
 
 // ---------- config ----------
@@ -320,9 +320,9 @@ function PlaceInput({ value, onChange, places, placeholder, onEnter, saved = [],
  * @param {{ me?: string | null, meName?: string, onSignOut?: (() => void | Promise<void>) | null,
  *          notifyCity?: string, onSetCity?: ((city: string) => void) | null,
  *          initialEvent?: string | null, group: import("@/lib/group").Group,
- *          remember?: boolean }} props
+ *          groups?: import("@/lib/group").GroupChip[], remember?: boolean }} props
  */
-export default function App({ me: meFromAuth = null, meName = "", onSignOut = null, notifyCity = "", onSetCity = null, initialEvent = null, group, remember = false }) {
+export default function App({ me: meFromAuth = null, meName = "", onSignOut = null, notifyCity = "", onSetCity = null, initialEvent = null, group, groups = [], remember = false }) {
   const [me, setMe] = useState(meFromAuth);
   const cities = useMemo(() => ({
     list: group.cities.map((c) => c.name),
@@ -744,7 +744,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
       ) : (
         <>
           {/* Le header reste en place partout : liste comme fiche d'event. */}
-          <Header meName={meName} onSignOut={onSignOut} onHome={goHome} notifyCity={notifyCity} onSetCity={onSetCity} group={group} />
+          <Header meName={meName} onSignOut={onSignOut} onHome={goHome} notifyCity={notifyCity} onSetCity={onSetCity} group={group} groups={groups} />
           {/* Au-dessus des deux vues : c'est sur la fiche que se font presque
               toutes les écritures, un échec ne doit pas y passer inaperçu. */}
           {loadError && (
@@ -797,8 +797,11 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
 
 
 // ---------- header + tabs ----------
-function Header({ meName, onSignOut, onHome, notifyCity, onSetCity, group }) {
+function Header({ meName, onSignOut, onHome, notifyCity, onSetCity, group, groups }) {
   const [open, setOpen] = useState(false);
+  // La liste des groupes s'ouvre depuis le nom du groupe, à gauche ; le
+  // menu du compte reste à droite.
+  const [switching, setSwitching] = useState(false);
   const cities = useCities();
   const [stuck, setStuck] = useState(false);
   // Optimiste : la puce se coche tout de suite, l'enregistrement suit.
@@ -815,11 +818,41 @@ function Header({ meName, onSignOut, onHome, notifyCity, onSetCity, group }) {
 
   return (
     <header className={"hd" + (stuck ? " stuck" : "")}>
-      <h1 className="hd-title-wrap">
-        <button type="button" className="hd-kicker" onClick={onHome} title="Revenir à l'accueil">
-          <span className="hd-badge" aria-hidden="true">{groupBadge(group)}</span> {group.name}
-        </button>
-      </h1>
+      <div className="hd-menu-wrap left">
+        <h1 className="hd-title-wrap">
+          <button type="button" className="hd-kicker" aria-haspopup="menu" aria-expanded={switching}
+            onClick={() => { onHome(); setSwitching((s) => !s); }} title="Changer de groupe">
+            <span className="hd-badge" aria-hidden="true">{groupBadge(group)}</span> {group.name}
+            <ChevronDown size={14} className={"hd-caret" + (switching ? " open" : "")} />
+          </button>
+        </h1>
+        {switching && (
+          <>
+            <div className="hd-backdrop" onClick={() => setSwitching(false)} />
+            {/* Un formulaire par groupe : l'action pose le cookie et recharge
+                l'accueil sur le groupe choisi, côté serveur. */}
+            <div className="hd-menu left" role="menu">
+              <div className="hd-menu-sec">Mes groupes</div>
+              <div className="hd-groups">
+                {groups.map((g) => g.id === group.id ? (
+                  <button key={g.id} type="button" className="hd-group on" onClick={() => setSwitching(false)}>
+                    <span className="hd-group-badge">{groupBadge(g)}</span> {g.name} <Check size={15} />
+                  </button>
+                ) : (
+                  <form key={g.id} action={openGroup.bind(null, g.id)}>
+                    <button type="submit" className="hd-group">
+                      <span className="hd-group-badge">{groupBadge(g)}</span> {g.name}
+                    </button>
+                  </form>
+                ))}
+              </div>
+              <a className="hd-menu-link" href="/groupes/nouveau">
+                <Plus size={15} /> Créer un groupe
+              </a>
+            </div>
+          </>
+        )}
+      </div>
       <div className="hd-menu-wrap">
         <button type="button" className="hd-me" aria-haspopup="menu" aria-expanded={open}
           title={meName} onClick={() => setOpen((o) => !o)}>{meName.slice(0, 2).toUpperCase()}</button>
@@ -1882,6 +1915,17 @@ a{text-decoration:none;color:inherit;}
 .hd-title-wrap{margin:0;min-width:0;}
 .hd-kicker:active{transform:scale(.97);}
 .hd-badge{font-size:13px;line-height:1;}
+.hd-caret{transition:transform .15s;opacity:.7;}
+.hd-caret.open{transform:rotate(180deg);}
+.hd-menu.left{left:0;right:auto;}
+.hd-groups{display:flex;flex-direction:column;gap:4px;margin-top:6px;}
+.hd-group{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:6px 10px;border:0;border-radius:12px;background:none;
+  font-family:inherit;font-weight:600;font-size:14.5px;color:var(--ink);text-align:left;}
+.hd-group:hover{background:var(--bg);}
+.hd-group.on{background:var(--accent-soft);color:var(--accent);}
+.hd-group.on svg{margin-left:auto;}
+.hd-group-badge{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:10px;
+  background:var(--bg);font-size:14px;font-weight:700;flex-shrink:0;}
 .hd-title{font-size:26px;font-weight:800;margin-top:9px;line-height:1.08;max-width:16ch;}
 .hd-me{flex-shrink:0;width:42px;height:42px;border-radius:14px;background:var(--ink);color:#fff;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;font-family:'Bricolage Grotesque';}
 .hd-menu-wrap{position:relative;flex-shrink:0;}

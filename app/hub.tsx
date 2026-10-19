@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { cookies } from "next/headers";
 
 import { createClient } from "@/lib/supabase/server";
@@ -118,6 +119,7 @@ export function Hub({ viewer, initialEvent }: { viewer: Viewer; initialEvent?: s
       onSetCity={setNotifyCity}
       initialEvent={initialEvent}
       group={viewer.group!}
+      groups={viewer.groups}
       remember={viewer.remember}
     />
   );
@@ -135,8 +137,11 @@ export function NotYet({ viewer }: { viewer: Viewer }) {
         plans.
       </p>
       <p className="auth-msg ok">Demande un lien d&apos;invitation à un membre, puis ouvre-le.</p>
+      <Link className="auth-submit" href="/groupes/nouveau" style={{ marginTop: 20 }}>
+        Ou crée ton propre groupe
+      </Link>
       <form action={signOut}>
-        <button className="auth-submit" type="submit" style={{ marginTop: 20 }}>
+        <button className="auth-submit" type="submit" style={{ marginTop: 12 }}>
           Se déconnecter
         </button>
       </form>
