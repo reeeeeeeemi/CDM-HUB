@@ -26,6 +26,8 @@ import { categoryOf, groupCategories, CATEGORIES } from "@/lib/catalog";
 import { cityEmoji as cityEmojiIn, groupBadge } from "@/lib/group";
 import { rememberGroup, openGroup } from "@/lib/actions/group";
 import { notifyNewEvent, notifyEventActivity, notifyAttendees, nudgeEvent } from "@/lib/actions/push";
+// PROTOTYPE — accueils alternatifs, à retirer une fois le choix fait.
+import HubPrototype, { PrototypeSwitcher, prototypeOn } from "./hub-prototype";
 
 // ---------- config ----------
 // Les catégories viennent du catalogue (lib/catalog.ts) ; chaque groupe en
@@ -352,6 +354,22 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
 
   const [loadError, setLoadError] = useState("");
   const [news, setNews] = useState(false);
+
+  // PROTOTYPE — ?variant=B|C|D remplace la liste par un accueil alternatif.
+  const [variant, setVariant] = useState("A");
+  useEffect(() => {
+    if (!prototypeOn) return;
+    const v = new URLSearchParams(window.location.search).get("variant");
+    // Lu après l'hydratation : le serveur ne connaît pas l'URL du navigateur.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- prototype jetable
+    if (v) setVariant(v.toUpperCase());
+  }, []);
+  const pickVariant = useCallback((v) => {
+    setVariant(v);
+    const u = new URL(window.location.href);
+    u.searchParams.set("variant", v);
+    window.history.replaceState(window.history.state, "", u);
+  }, []);
 
   /**
    * Ouvrir un event change l'URL sans recharger la page. pushState est
@@ -762,12 +780,12 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
                 {birthdaysToday(BIRTHDAYS).map((b) => (
                   <div className="bday" key={b.id}><Cake size={17} /> C&apos;est l&apos;anniv de <b>{nameOf(b.id)}</b> aujourd&apos;hui, {b.age} ans 🎉</div>
                 ))}
-                <div className="seg">
+                {variant !== "C" && <div className="seg">
                   <button className={scale === "big" ? "on" : ""} onClick={() => setScale("big")}><Sparkles size={15} /> Big events</button>
                   <button className={scale === "daily" ? "on" : ""} onClick={() => setScale("daily")}>Au quotidien</button>
-                </div>
+                </div>}
                 {/* Un groupe sans villes n'a pas de filtre : tout s'affiche. */}
-                {cities.list.length > 0 && (
+                {variant !== "C" && cities.list.length > 0 && (
                   <div className="cities">
                     <button className={"citychip" + (city === "all" ? " on" : "")} onClick={() => pickCity("all")}>Toutes</button>
                     {cityChips.map((c) => (
@@ -777,7 +795,8 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
                     ))}
                   </div>
                 )}
-                <EventsView data={filtered} me={me} onOpen={openEvent} scale={scale} />
+                {variant === "A" ? <EventsView data={filtered} me={me} onOpen={openEvent} scale={scale} />
+                  : <HubPrototype variant={variant} events={events} filtered={[...filtered.up, ...filtered.past]} me={me} group={group} onOpen={openEvent} />}
           </main>
           <button className="fab" onClick={() => setModal("event")}>
             <Plus size={22} strokeWidth={2.4} />
@@ -789,6 +808,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
       )}
       {modal === "event" && <EventForm defScale={scale} defCity={city !== "all" ? city : ""} onClose={closeModal} onSave={addEvent} places={places} savedPlaces={savedPlaces} />}
       {news && !modal && !loading && <WhatsNew onClose={closeNews} />}
+      {prototypeOn && !loading && !selectedEvent && !modal && <PrototypeSwitcher current={variant} onChange={pickVariant} />}
       {modal === "edit" && selectedEvent && <EventForm initial={selectedEvent} onClose={closeModal} onSave={(e) => editEvent(selectedEvent.id, e)} places={places} savedPlaces={savedPlaces} />}
     </div>
     </GroupCtx.Provider>
