@@ -87,8 +87,9 @@ const QUICK = [
 ];
 
 /**
- * « Tu viens ? » se répond sur place : trois boutons sous le titre, et la
- * ligne quitte le bloc. Un vote de date, lui, demande la fiche.
+ * « Tu viens ? » se répond sur place : trois pastilles discrètes à droite
+ * de la ligne, et la ligne quitte le bloc. Un vote de date, lui, demande la
+ * fiche.
  */
 function ToPlay({ events, me, onOpen, onRsvp }) {
   const items = useMemo(() => toPlay(events, me), [events, me]);
@@ -106,16 +107,16 @@ function ToPlay({ events, me, onOpen, onRsvp }) {
               <b>{ev.title}</b>
               <em>{why}{ev.date && <span> · {parse(ev.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}</span>}</em>
             </span>
-            <ChevronRight size={16} />
+            {!(rsvp && onRsvp) && <ChevronRight size={16} />}
           </button>
           {rsvp && onRsvp && (
-            <div className="px-quick">
+            <span className="px-quick">
               {QUICK.map(([k, label, I]) => (
-                <button key={k} style={{ "--a": ANSWER[k].color, "--s": ANSWER[k].soft }} onClick={() => onRsvp(ev.id, k)}>
-                  <I size={14} /> {label}
+                <button key={k} aria-label={label} title={label} style={{ "--a": ANSWER[k].color }} onClick={() => onRsvp(ev.id, k)}>
+                  <I size={14} strokeWidth={2.6} />
                 </button>
               ))}
-            </div>
+            </span>
           )}
         </div>
       ))}
@@ -435,13 +436,16 @@ const CSS = `
 .px-play h2{display:flex;align-items:center;gap:8px;font-family:'Bricolage Grotesque',system-ui;font-size:16px;font-weight:800;margin:0 0 6px 2px;}
 .px-play h2 span{background:var(--accent);color:#fff;border-radius:10px;font-size:12px;padding:2px 8px;}
 .px-play-row{display:flex;align-items:center;gap:10px;width:100%;padding:9px 2px;border:0;border-top:1px solid var(--line);background:none;text-align:left;color:var(--ink);}
-.px-play-item{border-top:1px solid var(--line);}
+.px-play-item{display:flex;align-items:center;gap:6px;border-top:1px solid var(--line);}
+.px-play-item .px-play-row{flex:1;min-width:0;}
 .px-play-item:first-of-type{border-top:0;}
 .px-play-item .px-play-row{border-top:0;}
-.px-quick{display:flex;gap:6px;padding:0 0 10px 40px;}
-.px-quick button{flex:1;display:flex;align-items:center;justify-content:center;gap:5px;min-height:36px;padding:0 6px;border-radius:11px;
-  border:1.5px solid var(--a);background:var(--s);color:var(--a);font-weight:700;font-size:12.5px;}
-.px-quick button:active{background:var(--a);color:#fff;}
+/* Trois pastilles de 30 px : assez pour le pouce, assez petites pour ne
+   pas transformer le bloc en formulaire. */
+.px-quick{display:flex;gap:5px;flex-shrink:0;}
+.px-quick button{display:flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;border-radius:50%;
+  border:1.5px solid color-mix(in srgb, var(--a) 45%, transparent);background:none;color:var(--a);}
+.px-quick button:active{background:var(--a);border-color:var(--a);color:#fff;}
 .px-play-ic{display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:10px;background:var(--accent-soft);color:var(--accent);flex-shrink:0;}
 .px-play-txt{flex:1;min-width:0;display:flex;flex-direction:column;}
 .px-play-txt b{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
