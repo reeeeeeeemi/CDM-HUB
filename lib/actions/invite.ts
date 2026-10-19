@@ -7,12 +7,12 @@ import { createClient } from "@/lib/supabase/server";
 const DAYS = 7;
 
 /**
- * Crée un lien d'invitation valable une semaine.
+ * Crée un lien d'invitation vers un groupe, valable une semaine.
  *
  * La politique RLS « un membre invite » fait le contrôle : un compte hors
  * du groupe ne peut pas en produire.
  */
-export async function createInvite(): Promise<{ url?: string; error?: string }> {
+export async function createInvite(groupId: string): Promise<{ url?: string; error?: string }> {
   const supabase = await createClient();
 
   const {
@@ -25,7 +25,7 @@ export async function createInvite(): Promise<{ url?: string; error?: string }> 
 
   const { data, error } = await supabase
     .from("invites")
-    .insert({ created_by: user.id, expires_at: expires })
+    .insert({ group_id: groupId, created_by: user.id, expires_at: expires })
     .select("id")
     .single();
 

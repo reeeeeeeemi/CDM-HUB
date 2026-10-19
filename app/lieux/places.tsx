@@ -2,22 +2,23 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { CITIES } from "@/lib/brand";
+import { cityEmoji, type City } from "@/lib/group";
 import {
   ChevronLeft, ChevronDown, Search, MapPin, KeyRound, Building, Pencil, Trash2, Plus, Copy, Navigation, X, Wifi,
 } from "lucide-react";
 
-type PlaceFields = { name: string; address: string; doorCode: string; access: string; wifiName: string; wifiPassword: string; city: string };
+type PlaceFields = { name: string; address: string; doorCode: string; access: string; wifiName: string; wifiPassword: string; city: string; isHome: boolean };
 type Place = PlaceFields & { id: string; ownerId: string; owner: string; upcoming: number };
 
 type Props = {
   viewer: { id: string; pseudo: string; city: string };
+  cities: City[];
   places: Place[];
   onSave: (id: string | null, place: PlaceFields) => Promise<{ id?: string; error?: string }>;
   onDelete: (id: string) => Promise<{ error?: string }>;
 };
 
-const EMPTY: PlaceFields = { name: "", address: "", doorCode: "", access: "", wifiName: "", wifiPassword: "", city: "" };
+const EMPTY: PlaceFields = { name: "", address: "", doorCode: "", access: "", wifiName: "", wifiPassword: "", city: "", isHome: false };
 const mapsUrl = (address: string) =>
   `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
 // Sans accents ni majuscules : « Bezier » trouve « Béziers ».
@@ -29,11 +30,13 @@ const fold = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCa
  * recherche unique fouille noms, personnes et adresses. Chaque lieu tient
  * sur une ligne ; on l'ouvre pour lire le code ou lancer l'itinéraire.
  */
-export default function Places({ viewer, places, onSave, onDelete }: Props) {
+export default function Places({ viewer, cities, places, onSave, onDelete }: Props) {
   const [list, setList] = useState<Place[]>(places);
   const [q, setQ] = useState("");
-  // Comme l'onglet du quotidien : on part de sa propre ville.
-  const [city, setCity] = useState(viewer.city || "all");
+  // Comme l'onglet du quotidien : on part de sa propre ville, si le groupe a
+  // des villes. Sinon il n'y a pas de filtre.
+  const [city, setCity] = useState(cities.length > 0 && viewer.city ? viewer.city : "all");
+  const emoji = (c: string) => cityEmoji(cities, c);
   const [openId, setOpenId] = useState<string | null>(null);
   // null : aucun formulaire ; "new" : ajout ; sinon l'id modifié.
   const [editing, setEditing] = useState<string | null>(null);
@@ -49,9 +52,9 @@ export default function Places({ viewer, places, onSave, onDelete }: Props) {
   const meId = viewer.id;
   // Les villes du groupe, plus celles qu'un lieu porterait hors liste.
   const cityChips = useMemo(() => {
-    const extra = [...new Set(list.map((p) => p.city).filter((c) => c && !CITIES[c]))].sort();
-    return [...Object.keys(CITIES), ...extra];
-  }, [list]);
+    const extra = [...new Set(list.map((p) => p.city).filter((c) => c && !cities.some((x) => x.name === c)))].sort();
+    return [...cities.map((c) => c.name), ...extra];
+  }, [list, cities]);
   // Les miens d'abord, puis les autres par ordre alphabétique de personne.
   const groups = useMemo(() => {
     const needle = fold(q.trim());
@@ -74,7 +77,7 @@ export default function Places({ viewer, places, onSave, onDelete }: Props) {
   const startEdit = (p: Place | null) => {
     setEditing(p ? p.id : "new");
     // Un nouveau lieu prend la ville affichée, à défaut la sienne.
-    setDraft(p ? { name: p.name, address: p.address, doorCode: p.doorCode, access: p.access, wifiName: p.wifiName, wifiPassword: p.wifiPassword, city: p.city } : { ...EMPTY, city: city !== "all" ? city : viewer.city });
+    setDraft(p ? { name: p.name, address: p.address, doorCode: p.doorCode, access: p.access, wifiName: p.wifiName, wifiPassword: p.wifiPassword, city: p.city, isHome: p.isHome } : { ...EMPTY, city: city !== "all" ? city : viewer.city });
   };
 
   const save = async () => {
@@ -84,7 +87,7 @@ export default function Places({ viewer, places, onSave, onDelete }: Props) {
     const clean = {
       name: draft.name.trim(), address: draft.address.trim(),
       doorCode: draft.doorCode.trim(), access: draft.access.trim(), wifiName: draft.wifiName.trim(), wifiPassword: draft.wifiPassword.trim(),
-      city: draft.city.trim(),
+      city: draft.city.trim(), isHome: draft.isHome,
     };
     setList((prev) => id
       ? prev.map((p) => (p.id === id ? { ...p, ...clean } : p))
@@ -135,17 +138,19 @@ export default function Places({ viewer, places, onSave, onDelete }: Props) {
         {q && <button type="button" aria-label="Effacer" onClick={() => setQ("")}><X size={15} /></button>}
       </div>
 
-      <div className="lx-cities">
-        <button className={"lx-city" + (city === "all" ? " on" : "")} onClick={() => setCity("all")}>Toutes</button>
-        {cityChips.map((c) => (
-          <button key={c} className={"lx-city" + (city === c ? " on" : "")} onClick={() => setCity(c)}>
-            {CITIES[c] || "📍"} {c}
-          </button>
-        ))}
-      </div>
+      {cities.length > 0 && (
+        <div className="lx-cities">
+          <button className={"lx-city" + (city === "all" ? " on" : "")} onClick={() => setCity("all")}>Toutes</button>
+          {cityChips.map((c) => (
+            <button key={c} className={"lx-city" + (city === c ? " on" : "")} onClick={() => setCity(c)}>
+              {emoji(c)} {c}
+            </button>
+          ))}
+        </div>
+      )}
 
       {editing === "new" ? (
-        <PlaceForm draft={draft} setDraft={setDraft} onSave={save} onCancel={() => setEditing(null)} />
+        <PlaceForm draft={draft} setDraft={setDraft} cities={cities} onSave={save} onCancel={() => setEditing(null)} />
       ) : (
         <button className="lx-add" onClick={() => startEdit(null)}><Plus size={16} /> Ajouter un lieu</button>
       )}
@@ -167,15 +172,15 @@ export default function Places({ viewer, places, onSave, onDelete }: Props) {
           <h2>{g.owner}</h2>
           <div className="lx-list">
             {g.places.map((p) => editing === p.id ? (
-              <PlaceForm key={p.id} draft={draft} setDraft={setDraft} onSave={save} onCancel={() => setEditing(null)} />
+              <PlaceForm key={p.id} draft={draft} setDraft={setDraft} cities={cities} onSave={save} onCancel={() => setEditing(null)} />
             ) : (
               <div className={"lx-item" + (openId === p.id ? " open" : "")} key={p.id}>
                 <button type="button" className="lx-row" aria-expanded={openId === p.id}
                   onClick={() => setOpenId(openId === p.id ? null : p.id)}>
                   <span className="lx-name">
-                    <b>{p.name}</b>
+                    <b>{p.isHome && <span aria-label="Chez soi">🏠 </span>}{p.name}</b>
                     {(p.address || (city === "all" && p.city)) && (
-                      <em>{city === "all" && p.city ? `${CITIES[p.city] || "📍"} ${p.city}${p.address ? " · " : ""}` : ""}{p.address}</em>
+                      <em>{city === "all" && p.city ? `${emoji(p.city)} ${p.city}${p.address ? " · " : ""}` : ""}{p.address}</em>
                     )}
                   </span>
                   <ChevronDown size={17} />
@@ -229,16 +234,17 @@ export default function Places({ viewer, places, onSave, onDelete }: Props) {
   );
 }
 
-function PlaceForm({ draft, setDraft, onSave, onCancel }: {
+function PlaceForm({ draft, setDraft, cities, onSave, onCancel }: {
   draft: PlaceFields;
   setDraft: (d: PlaceFields) => void;
+  cities: City[];
   onSave: () => void;
   onCancel: () => void;
 }) {
   const set = (k: keyof PlaceFields) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setDraft({ ...draft, [k]: e.target.value });
   // Une ville hors de la liste du groupe se tape à la main.
-  const [other, setOther] = useState(Boolean(draft.city && !CITIES[draft.city]));
+  const [other, setOther] = useState(Boolean(draft.city && !cities.some((c) => c.name === draft.city)));
   return (
     <div className="lx-form">
       <label className="rg-field"><span>Nom</span>
@@ -246,9 +252,9 @@ function PlaceForm({ draft, setDraft, onSave, onCancel }: {
       </label>
       <div className="rg-field"><span>Ville</span>
         <div className="lx-cities form">
-          {Object.keys(CITIES).map((c) => (
+          {cities.map(({ name: c, emoji }) => (
             <button key={c} type="button" className={"lx-city" + (!other && draft.city === c ? " on" : "")}
-              onClick={() => { setOther(false); setDraft({ ...draft, city: draft.city === c ? "" : c }); }}>{CITIES[c]} {c}</button>
+              onClick={() => { setOther(false); setDraft({ ...draft, city: draft.city === c ? "" : c }); }}>{emoji} {c}</button>
           ))}
           <button type="button" className={"lx-city" + (other ? " on" : "")}
             onClick={() => { setOther(!other); setDraft({ ...draft, city: "" }); }}>📍 Autre</button>
@@ -276,6 +282,12 @@ function PlaceForm({ draft, setDraft, onSave, onCancel }: {
           <input value={draft.wifiPassword} onChange={set("wifiPassword")} placeholder="••••••••" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
         </label>
       </div>
+      {/* Un chez-soi suit son propriétaire dans tous ses groupes ; un autre
+          lieu reste dans celui où on l'ajoute. */}
+      <label className="lx-home">
+        <input type="checkbox" checked={draft.isHome} onChange={(e) => setDraft({ ...draft, isHome: e.target.checked })} />
+        <span><b>C&apos;est chez moi</b><em>Visible dans tous tes groupes. Sinon, seulement dans celui-ci.</em></span>
+      </label>
       <div className="lx-acts">
         <button onClick={onCancel}>Annuler</button>
         <button className="primary" onClick={onSave} disabled={!draft.name.trim()}>Enregistrer</button>

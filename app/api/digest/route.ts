@@ -47,12 +47,15 @@ export async function GET(request: Request) {
   for (const list of byDevice.values()) {
     const total = list.reduce((n, r) => n + r.joined, 0);
     const first = list[0];
+    // Les events peuvent venir de plusieurs groupes : chacun porte le sien.
+    const label = (r: Row) => (r.prefix ? `${r.prefix} · ${r.title}` : r.title);
     const body =
       list.length === 1
-        ? first.title
-        : list.map((r) => `${r.title} (+${r.joined})`).join(" · ");
+        ? label(first)
+        : list.map((r) => `${label(r)} (+${r.joined})`).join(" · ");
 
-    const res = await sendPush([first], {
+    // Le préfixe est déjà dans le corps : sendPush ne le remet pas.
+    const res = await sendPush([{ ...first, prefix: "" }], {
       title: `${total} ${total > 1 ? "personnes se sont ajoutées" : "personne s'est ajoutée"}`,
       body,
       // Un seul event : on ouvre dessus. Plusieurs : on ouvre la liste.

@@ -1,11 +1,11 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef, createContext, useContext } from "react";
 import {
   Plus, Users, CalendarDays, MapPin, ChevronLeft, ChevronDown, Check, HelpCircle,
   X, Trash2, Sparkles, Send, Wallet, MessageCircle, Link2,
   ExternalLink, MessageSquare, ListTodo, CheckCircle2, Circle, CalendarClock, Lock,
-  Car, Plane, TrainFront, UserPlus, Navigation, CalendarX, AlertTriangle, CalendarPlus,
+  Car, Plane, TrainFront, UserPlus, Navigation, AlertTriangle, CalendarPlus,
   House, Map as MapIcon, MapPinned, ShoppingCart, BedDouble, Share2, Settings2, Pencil, BellRing, KeyRound, Building, Cake, Wifi, Copy,
 } from "lucide-react";
 
@@ -21,24 +21,31 @@ import {
 // sur la forme imbriquée héritée du prototype, et la traduction vit là-bas.
 import * as db from "@/lib/hub-data";
 import { nameOf, BIRTHDAYS } from "@/lib/hub-data";
-import { APP_NAME, CITIES } from "@/lib/brand";
+import { APP_NAME } from "@/lib/brand";
+import { categoryOf, groupCategories, CATEGORIES } from "@/lib/catalog";
+import { cityEmoji as cityEmojiIn, groupBadge } from "@/lib/group";
+import { rememberGroup } from "@/lib/actions/group";
 import { notifyNewEvent, notifyEventActivity, notifyAttendees, nudgeEvent } from "@/lib/actions/push";
 
 // ---------- config ----------
-// Couleurs assez sombres pour porter du texte : au moins 4,5:1 en étiquette
-// sur fond teinté comme sous un titre blanc.
-const CATS = {
-  soiree:  { label: "Soirée",      color: "#7C3AED", emoji: "🎉" },
-  sport:   { label: "Sport",       color: "#0F766E", emoji: "⚽" },
-  resto:   { label: "Resto",       color: "#C2410C", emoji: "🍽️" },
-  picnic:  { label: "Pique-nique", color: "#3F6212", emoji: "🧺" },
-  voyage:  { label: "Voyage",      color: "#2563EB", emoji: "✈️" },
-  coinche: { label: "Coinche",     color: "#BE185D", emoji: "🃏" },
-  autre:   { label: "Autre",       color: "#475569", emoji: "📌" },
-};
-const CITY_LIST = Object.keys(CITIES);
-// Toute ville hors liste garde une épingle en guise d'emoji.
-const cityEmoji = (c) => CITIES[c] || "📍";
+// Les catégories viennent du catalogue (lib/catalog.ts) ; chaque groupe en
+// choisit quelques-unes. Les villes, elles, sont celles du groupe.
+
+/**
+ * Le groupe ouvert : ses villes et ses catégories. Lu là où il sert, plutôt
+ * que passé de main en main à travers toute la fiche.
+ */
+const GroupCtx = createContext({ id: "", name: "", emoji: null, cities: [], categories: [] });
+
+/** Les villes du groupe. Une ville hors liste garde une épingle. */
+function useCities() {
+  const { cities } = useContext(GroupCtx);
+  return useMemo(() => ({
+    list: cities.map((c) => c.name),
+    has: (name) => cities.some((c) => c.name === name),
+    emoji: (name) => cityEmojiIn(cities, name),
+  }), [cities]);
+}
 // Initiales : une lettre par mot, deux au plus. « Ankara Messi » → AM,
 // « Kenny » → KE. Sert de pastille devant le nom, jamais à sa place.
 const initials = (name) => {
@@ -312,24 +319,29 @@ function PlaceInput({ value, onChange, places, placeholder, onEnter, saved = [],
  *
  * @param {{ me?: string | null, meName?: string, onSignOut?: (() => void | Promise<void>) | null,
  *          notifyCity?: string, onSetCity?: ((city: string) => void) | null,
- *          initialEvent?: string | null }} props
+ *          initialEvent?: string | null, group: import("@/lib/group").Group,
+ *          remember?: boolean }} props
  */
-export default function App({ me: meFromAuth = null, meName = "", onSignOut = null, notifyCity = "", onSetCity = null, initialEvent = null }) {
+export default function App({ me: meFromAuth = null, meName = "", onSignOut = null, notifyCity = "", onSetCity = null, initialEvent = null, group, remember = false }) {
   const [me, setMe] = useState(meFromAuth);
+  const cities = useMemo(() => ({
+    list: group.cities.map((c) => c.name),
+    has: (name) => group.cities.some((c) => c.name === name),
+  }), [group.cities]);
   const [scale, setScale] = useState("big");
   // Un filtre de ville par échelle. Au quotidien, on part de la ville du
   // profil : un plan resto à Bordeaux ne concerne pas qui vit à Toulouse.
   // Les big events, eux, s'ouvrent sur « Toutes » — un ski se monte ailleurs
   // que chez soi, et le filtrer par défaut le ferait disparaître.
   const [cityBig, setCityBig] = useState("all");
-  const [cityDaily, setCityDaily] = useState(notifyCity || "all");
+  // Sans villes, le groupe n'a pas de filtre : tout s'affiche.
+  const [cityDaily, setCityDaily] = useState(group.cities.length > 0 && notifyCity ? notifyCity : "all");
   const city = scale === "big" ? cityBig : cityDaily;
   const setCity = scale === "big" ? setCityBig : setCityDaily;
   // Au retour sur le hub, on repart du dernier chargement : l'écran est là
   // tout de suite, et reload() le rafraîchit derrière.
-  const [cached] = useState(db.cachedHub);
+  const [cached] = useState(() => db.cachedHub(group.id));
   const [events, setEvents] = useState(cached?.events || []);
-  const [availability, setAvailability] = useState(cached?.availability || []);
   const [members, setMembers] = useState(cached?.members || []);
   const [savedPlaces, setSavedPlaces] = useState(cached?.places || []);
   // Renseigné quand on arrive par un lien partagé ou une notification.
@@ -376,9 +388,8 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
 
   const reload = useCallback(async () => {
     try {
-      const { events: evs, availability: av, members: mb, places: pl } = await db.loadHub();
+      const { events: evs, members: mb, places: pl } = await db.loadHub(group.id);
       setEvents(evs);
-      setAvailability(av);
       setMembers(mb);
       setSavedPlaces(pl);
       setLoadError("");
@@ -387,7 +398,13 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
       setLoadError(e?.message || "Impossible de joindre le hub.");
       return null;
     }
-  }, []);
+  }, [group.id]);
+
+  // Arrivé par l'event d'un autre groupe que le dernier ouvert : on retient
+  // celui-ci, pour que revenir à l'accueil y reste.
+  useEffect(() => {
+    if (remember) rememberGroup(group.id).catch(() => {});
+  }, [remember, group.id]);
 
   const closeNews = useCallback(() => {
     setNews(false);
@@ -451,9 +468,9 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
     // La ville du profil figure toujours, même sans event : sinon le filtre
     // serait actif sans qu'aucune pastille ne montre laquelle est retenue.
     const free = [...events.map((e) => e.city), notifyCity];
-    const extra = [...new Set(free.filter((c) => c && !CITIES[c]))].sort();
-    return [...CITY_LIST, ...extra];
-  }, [events, notifyCity]);
+    const extra = [...new Set(free.filter((c) => c && !cities.has(c)))].sort();
+    return [...cities.list, ...extra];
+  }, [events, notifyCity, cities]);
 
   // Toute action suit le même schéma : l'écran change tout de suite, l'écriture
   // part derrière, et si la base refuse on recharge pour revenir au vrai.
@@ -470,7 +487,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
     const row = { ...e, id: uid(), createdBy: me, createdAt: Date.now() };
     setEvents((prev) => [{ ...row, rsvps: { [me]: "in" }, comments: [], todos: [], datePoll: [], placePoll: [], transport: [], hosting: [] }, ...prev]);
     setModal(null);
-    await persist(() => db.insertEvent(row, me));
+    await persist(() => db.insertEvent(row, me, group.id));
     // Le créateur est chaud par défaut : une ligne de plus, à part.
     await persist(() => db.setRsvp(row.id, me, "in"));
     // Règles 1 et 2 : big event pour tout le groupe, plan du quotidien pour
@@ -690,20 +707,6 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
     },
   }), [me, meName, updateEvent, persist, delEvent]);
 
-  /* eslint-disable @typescript-eslint/no-unused-vars --
-     L'onglet Dispos est en pause côté navigation, mais ses écritures sont
-     branchées : le rebrancher ne demandera qu'une ligne de rendu. */
-  const addAvail = (o) => {
-    const row = { ...o, id: uid(), by: me };
-    setAvailability((prev) => [row, ...prev]);
-    persist(() => db.addAvailability(row.id, me, o));
-  };
-  const delAvail = (id) => {
-    setAvailability((prev) => prev.filter((a) => a.id !== id));
-    persist(() => db.delAvailability(id));
-  };
-  /* eslint-enable @typescript-eslint/no-unused-vars */
-
   // Le titre du header ramène à la liste, quel que soit l'endroit où on est.
   const goHome = () => closeEvent();
 
@@ -733,6 +736,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
   const selectedEvent = events.find((e) => e.id === selected);
 
   return (
+    <GroupCtx.Provider value={group}>
     <div className="root">
       <style>{CSS}</style>
       {loading ? (
@@ -740,7 +744,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
       ) : (
         <>
           {/* Le header reste en place partout : liste comme fiche d'event. */}
-          <Header meName={meName} onSignOut={onSignOut} onHome={goHome} notifyCity={notifyCity} onSetCity={onSetCity} />
+          <Header meName={meName} onSignOut={onSignOut} onHome={goHome} notifyCity={notifyCity} onSetCity={onSetCity} group={group} />
           {/* Au-dessus des deux vues : c'est sur la fiche que se font presque
               toutes les écritures, un échec ne doit pas y passer inaperçu. */}
           {loadError && (
@@ -751,7 +755,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
             </div>
           )}
           {selectedEvent ? (
-            <EventDetail ev={selectedEvent} me={me} members={members} actions={actions} availability={availability} onBack={closeEvent} onEdit={() => setModal("edit")} places={places} savedPlaces={savedPlaces} />
+            <EventDetail ev={selectedEvent} me={me} members={members} actions={actions} onBack={closeEvent} onEdit={() => setModal("edit")} places={places} savedPlaces={savedPlaces} />
           ) : (
             <>
           <main className="wrap">
@@ -762,14 +766,17 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
                   <button className={scale === "big" ? "on" : ""} onClick={() => setScale("big")}><Sparkles size={15} /> Big events</button>
                   <button className={scale === "daily" ? "on" : ""} onClick={() => setScale("daily")}>Au quotidien</button>
                 </div>
-                <div className="cities">
-                  <button className={"citychip" + (city === "all" ? " on" : "")} onClick={() => pickCity("all")}>Toutes</button>
-                  {cityChips.map((c) => (
-                    <button key={c} className={"citychip" + (city === c ? " on" : "")} onClick={() => pickCity(c)}>
-                      {cityEmoji(c)} {c}{newCities.has(c) && <span className="dot" />}
-                    </button>
-                  ))}
-                </div>
+                {/* Un groupe sans villes n'a pas de filtre : tout s'affiche. */}
+                {cities.list.length > 0 && (
+                  <div className="cities">
+                    <button className={"citychip" + (city === "all" ? " on" : "")} onClick={() => pickCity("all")}>Toutes</button>
+                    {cityChips.map((c) => (
+                      <button key={c} className={"citychip" + (city === c ? " on" : "")} onClick={() => pickCity(c)}>
+                        {cityEmojiIn(group.cities, c)} {c}{newCities.has(c) && <span className="dot" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <EventsView data={filtered} me={me} onOpen={openEvent} scale={scale} />
           </main>
           <button className="fab" onClick={() => setModal("event")}>
@@ -784,13 +791,15 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
       {news && !modal && !loading && <WhatsNew onClose={closeNews} />}
       {modal === "edit" && selectedEvent && <EventForm initial={selectedEvent} onClose={closeModal} onSave={(e) => editEvent(selectedEvent.id, e)} places={places} savedPlaces={savedPlaces} />}
     </div>
+    </GroupCtx.Provider>
   );
 }
 
 
 // ---------- header + tabs ----------
-function Header({ meName, onSignOut, onHome, notifyCity, onSetCity }) {
+function Header({ meName, onSignOut, onHome, notifyCity, onSetCity, group }) {
   const [open, setOpen] = useState(false);
+  const cities = useCities();
   const [stuck, setStuck] = useState(false);
   // Optimiste : la puce se coche tout de suite, l'enregistrement suit.
   const [city, setCity] = useState(notifyCity || "");
@@ -808,7 +817,7 @@ function Header({ meName, onSignOut, onHome, notifyCity, onSetCity }) {
     <header className={"hd" + (stuck ? " stuck" : "")}>
       <h1 className="hd-title-wrap">
         <button type="button" className="hd-kicker" onClick={onHome} title="Revenir à l'accueil">
-          <Users size={13} /> {APP_NAME}
+          <span className="hd-badge" aria-hidden="true">{groupBadge(group)}</span> {group.name}
         </button>
       </h1>
       <div className="hd-menu-wrap">
@@ -826,14 +835,18 @@ function Header({ meName, onSignOut, onHome, notifyCity, onSetCity }) {
               {/* Ma ville, pas mes villes de notification : celle-ci ouvre
                   l'onglet quotidien au bon endroit. Les villes qui font
                   sonner le téléphone se cochent dans les Réglages. */}
-              <div className="hd-menu-sec">Ma ville</div>
-              <p className="hd-menu-hint">L&apos;onglet « Au quotidien » s&apos;ouvrira dessus.</p>
-              <div className="hd-menu-cities">
-                {CITY_LIST.map((c) => (
-                  <button key={c} type="button" className={"catchip city" + (city === c ? " on" : "")}
-                    onClick={() => pick(c)}>{CITIES[c]} {c}</button>
-                ))}
-              </div>
+              {cities.list.length > 0 && (
+                <>
+                  <div className="hd-menu-sec">Ma ville</div>
+                  <p className="hd-menu-hint">L&apos;onglet « Au quotidien » s&apos;ouvrira dessus.</p>
+                  <div className="hd-menu-cities">
+                    {cities.list.map((c) => (
+                      <button key={c} type="button" className={"catchip city" + (city === c ? " on" : "")}
+                        onClick={() => pick(c)}>{cities.emoji(c)} {c}</button>
+                    ))}
+                  </div>
+                </>
+              )}
 
               <a className="hd-menu-link" href="/lieux">
                 <House size={15} /> Nos lieux
@@ -876,7 +889,8 @@ function EventsView({ data, me, onOpen, scale }) {
   );
 }
 function EventCard({ ev, me, onOpen, past }) {
-  const cat = CATS[ev.category] || CATS.autre;
+  const cat = categoryOf(ev.category);
+  const cities = useCities();
   const cd = countdown(ev.date, ev.endDate, ev.time);
   const going = Object.values(ev.rsvps || {}).filter((s) => s === "in").length;
   const mine = ev.rsvps?.[me];
@@ -893,7 +907,7 @@ function EventCard({ ev, me, onOpen, past }) {
                 SVG et un emoji ne mesurent pas pareil, et les deux textes
                 démarraient à deux verticales différentes. */}
             <span><i className="mk"><CalendarDays size={13} /></i>{fmtRange(ev.date, ev.endDate)}{ev.time && !ev.endDate ? ` · ${ev.time}` : ""}</span>
-            {ev.city && <span><i className="mk">{cityEmoji(ev.city)}</i>{ev.city}</span>}
+            {ev.city && <span><i className="mk">{cities.emoji(ev.city)}</i>{ev.city}</span>}
           </div>
         </div>
         {/* Colonne de droite : quand, ta réponse, combien de chauds. Les trois
@@ -916,8 +930,9 @@ function EventCard({ ev, me, onOpen, past }) {
 }
 
 // ---------- event detail ----------
-function EventDetail({ ev, me, members, actions, availability, onBack, onEdit, places, savedPlaces }) {
+function EventDetail({ ev, me, members, actions, onBack, onEdit, places, savedPlaces }) {
   const [confirmDel, setConfirmDel] = useState(false);
+  const cities = useCities();
   const [shared, setShared] = useState(false);
   // L'agenda ne se déplie qu'à la demande : les deux destinations
   // occupaient en permanence une place qu'on ne leur utilise qu'une fois.
@@ -942,7 +957,7 @@ function EventDetail({ ev, me, members, actions, availability, onBack, onEdit, p
       setTimeout(() => setShared(false), 2000);
     } catch {}
   };
-  const cat = CATS[ev.category] || CATS.autre;
+  const cat = categoryOf(ev.category);
   const cd = countdown(ev.date, ev.endDate, ev.time);
   const groups = { in: [], maybe: [], out: [] };
   Object.entries(ev.rsvps || {}).forEach(([n, s]) => groups[s]?.push(n));
@@ -986,7 +1001,7 @@ function EventDetail({ ev, me, members, actions, availability, onBack, onEdit, p
         <div className="detail-tags">
           <span className="tag light">{cat.label}</span>
           {isBig && <span className="tag light"><Sparkles size={12} /> Big event</span>}
-          {ev.city && <span className="tag light">{cityEmoji(ev.city)} {ev.city}</span>}
+          {ev.city && <span className="tag light">{cities.emoji(ev.city)} {ev.city}</span>}
         </div>
         <h1 className="detail-title">{ev.title}</h1>
         <div className="detail-cds">
@@ -1045,7 +1060,7 @@ function EventDetail({ ev, me, members, actions, availability, onBack, onEdit, p
 
         {modOn(ev, "transport") && <Transport ev={ev} me={me} actions={actions} />}
         {modOn(ev, "hosting") && <Hosting ev={ev} me={me} actions={actions} />}
-        {modOn(ev, "datePoll") && <DatePoll ev={ev} me={me} isCreator={isCreator} actions={actions} availability={availability} />}
+        {modOn(ev, "datePoll") && <DatePoll ev={ev} me={me} isCreator={isCreator} actions={actions} />}
         {modOn(ev, "placePoll") && <PlacePoll ev={ev} me={me} isCreator={isCreator} actions={actions} places={places} savedPlaces={savedPlaces} />}
         {modOn(ev, "todos") && <TodoList ev={ev} me={me} actions={actions} kind="todo" />}
         {modOn(ev, "courses") && <TodoList ev={ev} me={me} actions={actions} kind="course" />}
@@ -1305,7 +1320,7 @@ function PlacePoll({ ev, me, isCreator, actions, places, savedPlaces }) {
       <div className="placeadd">
         <PlaceInput value={label} onChange={(v) => { setLabel(v); setPlaceId(""); }} places={places}
           saved={savedPlaces} onPick={(p) => { setLabel(p.name); setPlaceId(p.id); setUrl(p.address ? mapsSearch(p.address) : ""); }}
-          placeholder="Nom du lieu — Ex. Le Bibent, Chez Kenny" onEnter={add} />
+          placeholder="Nom du lieu — Ex. Le Bibent, chez Max" onEnter={add} />
         <div className="placeadd-row">
           <input value={url} placeholder="Lien Google Maps (optionnel)" onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
           <button className="addbtn" onClick={add} disabled={!label.trim()}><Plus size={18} /></button>
@@ -1373,7 +1388,7 @@ function Hosting({ ev, me, actions }) {
 }
 
 // ---------- sondage de dates ----------
-function DatePoll({ ev, me, isCreator, actions, availability }) {
+function DatePoll({ ev, me, isCreator, actions }) {
   const isBig = (ev.scale || "daily") === "big";
   const [d, setD] = useState("");
   const [d2, setD2] = useState("");
@@ -1384,28 +1399,19 @@ function DatePoll({ ev, me, isCreator, actions, availability }) {
     actions.addDate(ev.id, d, isBig && d2 && d2 !== d ? d2 : "");
     setD(""); setD2("");
   };
-  // Une indispo compte si elle recoupe le créneau, pas seulement son premier jour.
-  const conflictsFor = (from, to) => {
-    const last = to || from;
-    return [...new Set((availability || [])
-      .filter((a) => a.start <= last && (a.end || a.start) >= from)
-      .map((a) => a.by))];
-  };
   return (
     <section className="block">
       <div className="block-head"><CalendarClock size={17} /> Sondage de dates</div>
-      {!ev.date && poll.length === 0 && <p className="block-hint">Pas encore de date. Proposez des créneaux, chacun vote pour ses dispos. Les indispos connues sont signalées.</p>}
+      {!ev.date && poll.length === 0 && <p className="block-hint">Pas encore de date. Proposez des créneaux, chacun vote pour ses dispos.</p>}
       {ev.date && <p className="block-hint">Date fixée : {fmtRange(ev.date, ev.endDate)}. Vous pouvez proposer d&apos;autres créneaux.</p>}
       {poll.map((o) => {
         const voted = o.votes.includes(me);
-        const conf = conflictsFor(o.date, o.endDate);
         return (
           <div className="pollrow" key={o.id}>
             <button className={"pollvote" + (voted ? " on" : "")} onClick={() => actions.voteDate(ev.id, o.id)}><Check size={14} /> {o.votes.length}</button>
             <div className="pollinfo">
               <span className="polldate">{pollRange(o.date, o.endDate)}</span>
               {o.votes.length > 0 && <div className="pollnames">{o.votes.map(nameOf).join(", ")}</div>}
-              {conf.length > 0 && <div className="pollwarn"><AlertTriangle size={12} /> Indispo : {conf.map(nameOf).join(", ")}</div>}
             </div>
             {isCreator && <button className="polllock" aria-label="Figer ce créneau" title="Figer ce créneau"
               onClick={() => window.confirm(`Figer ${pollRange(o.date, o.endDate)} ? Les présents seront prévenus.`) && actions.lockDate(ev.id, o.id)}><Lock size={14} /></button>}
@@ -1510,58 +1516,6 @@ function ModuleToggles({ ev, actions }) {
   );
 }
 
-// ---------- onglet dispos ----------
-// Conservé tel quel : onglet Dispos en pause. Rebranchable sans réécriture.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function AvailabilityView({ availability, me, onAdd, onDel }) {
-  const [start, setStart] = useState(""); const [end, setEnd] = useState(""); const [note, setNote] = useState("");
-  const today = todayStr();
-  const add = () => { if (!start) return; onAdd({ start, end: end && end >= start ? end : "", note: note.trim() }); setStart(""); setEnd(""); setNote(""); };
-  const mine = availability.filter((a) => a.by === me).sort((a, b) => a.start.localeCompare(b.start));
-  const upcoming = availability.filter((a) => (a.end || a.start) >= today);
-  const byPerson = {};
-  upcoming.forEach((a) => { (byPerson[a.by] = byPerson[a.by] || []).push(a); });
-  Object.values(byPerson).forEach((arr) => arr.sort((a, b) => a.start.localeCompare(b.start)));
-  return (
-    <div className="avail">
-      <p className="avail-intro">Marque tes périodes d'indisponibilité. Elles apparaissent pour toute la bande et sont signalées dans les sondages de dates.</p>
-      <div className="cal-hint"><CalendarPlus size={14} /> Bientôt : synchro Google Agenda pour remplir ça automatiquement.</div>
-      <section className="block">
-        <div className="block-head"><CalendarX size={17} /> Mes indispos</div>
-        {mine.length === 0 && <p className="block-hint">Tu n'as rien marqué pour l'instant.</p>}
-        {mine.map((a) => (
-          <div className="availrow" key={a.id}>
-            <div className="availrow-info"><b>{fmtRange(a.start, a.end)}</b>{a.note && <span className="soft"> · {a.note}</span>}</div>
-            <button className="tododel" aria-label="Retirer" onClick={() => onDel(a.id)}><X size={15} /></button>
-          </div>
-        ))}
-        <div className="avail-form">
-          <div className="row2">
-            <label className="field mini"><span>Du</span><input type="date" value={start} onChange={(e) => setStart(e.target.value)} /></label>
-            <label className="field mini"><span>Au (optionnel)</span><input type="date" value={end} min={start} onChange={(e) => setEnd(e.target.value)} /></label>
-          </div>
-          <div className="addrow">
-            <input value={note} placeholder="Motif (optionnel) : vacances, taf…" onChange={(e) => setNote(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
-            <button className="addbtn" onClick={add} disabled={!start}><Plus size={18} /></button>
-          </div>
-        </div>
-      </section>
-      <div className="section-label">Toute la bande</div>
-      {Object.keys(byPerson).length === 0 ? (
-        <Empty icon={<CalendarX size={26} />} title="Personne n'a marqué d'indispo" text="Dès qu'un pote note une absence à venir, elle s'affiche ici." />
-      ) : (
-        Object.entries(byPerson).map(([person, arr]) => (
-          <div className="block" key={person}>
-            <div className="block-head"><span className="cmt-av">{initials(nameOf(person))}</span> {nameOf(person)}</div>
-            {arr.map((a) => (<div className="availrow" key={a.id}><div className="availrow-info"><b>{fmtRange(a.start, a.end)}</b>{a.note && <span className="soft"> · {a.note}</span>}</div></div>))}
-          </div>
-        ))
-      )}
-    </div>
-  );
-}
-
-
 // ---------- form bits ----------
 // Un <label> transmet tout clic reçu à son premier contrôle. Pour un champ
 // unique c'est ce qu'on veut ; pour un groupe de boutons ça cochait le
@@ -1576,10 +1530,12 @@ function Field({ label, children, hint, group }) {
     </Tag>
   );
 }
-function CatPicker({ value, onChange }) {
+/** Les catégories du groupe, plus `keep` : celle de l'event qu'on modifie. */
+function CatPicker({ value, onChange, keep = "" }) {
+  const { categories } = useContext(GroupCtx);
   return (
     <div className="catpick">
-      {Object.entries(CATS).map(([k, v]) => (
+      {groupCategories(categories, keep).map((k) => [k, CATEGORIES[k]]).map(([k, v]) => (
         <button key={k} type="button" className={"catchip" + (value === k ? " on" : "")}
           style={value === k ? { background: v.color, borderColor: v.color, color: "#fff" } : { color: v.color, borderColor: v.color + "55" }}
           onClick={() => onChange(k)}>{v.emoji} {v.label}</button>
@@ -1626,22 +1582,23 @@ function Clearable({ value, onClear, children }) {
 }
 
 function CityPicker({ value, onChange }) {
-  // Une ville hors des 5 habituelles bascule le champ libre en mode ouvert.
-  const [free, setFree] = useState(Boolean(value) && !CITIES[value]);
+  const cities = useCities();
+  // Une ville hors de la liste du groupe bascule le champ libre en mode ouvert.
+  const [free, setFree] = useState(Boolean(value) && !cities.has(value));
   return (
     <>
       <div className="catpick">
-        {CITY_LIST.map((c) => (
+        {cities.list.map((c) => (
           <button key={c} type="button" className={"catchip city" + (value === c ? " on" : "")}
-            onClick={() => { setFree(false); onChange(value === c ? "" : c); }}>{CITIES[c]} {c}</button>
+            onClick={() => { setFree(false); onChange(value === c ? "" : c); }}>{cities.emoji(c)} {c}</button>
         ))}
         <button type="button" className={"catchip city" + (free ? " on" : "")}
-          onClick={() => { const next = !free; setFree(next); if (!next) onChange(""); else if (CITIES[value]) onChange(""); }}>
+          onClick={() => { const next = !free; setFree(next); if (!next) onChange(""); else if (cities.has(value)) onChange(""); }}>
           📍 Autre…
         </button>
       </div>
       {free && (
-        <input className="city-free" autoFocus value={CITIES[value] ? "" : value}
+        <input className="city-free" autoFocus value={cities.has(value) ? "" : value}
           placeholder="Ex. Lisbonne, Berlin, Biarritz…" onChange={(e) => onChange(e.target.value)} />
       )}
     </>
@@ -1673,13 +1630,22 @@ function formFromEvent(ev) {
   };
 }
 
-// Un big event est le plus souvent un voyage, un plan du quotidien une soirée.
-const defCat = (scale) => (scale === "big" ? "voyage" : "soiree");
+// Un big event est le plus souvent un voyage, un plan du quotidien une soirée
+// — quand le groupe les a retenues. Sinon sa première catégorie.
+const defCat = (scale, categories) => {
+  const own = groupCategories(categories);
+  const wish = scale === "big" ? "voyage" : "soiree";
+  return own.includes(wish) ? wish : own[0];
+};
 
 function EventForm({ defScale, defCity, initial, onClose, onSave, places, savedPlaces = [] }) {
   const editing = Boolean(initial);
+  const { categories } = useContext(GroupCtx);
+  const cities = useCities();
+  // Sans villes, le groupe ne demande pas où : le champ reste libre.
+  const needCity = cities.list.length > 0;
   const [f, setF] = useState(() => initial ? formFromEvent(initial) : {
-    title: "", category: defCat(defScale || "big"), scale: defScale || "big", city: defCity || "",
+    title: "", category: defCat(defScale || "big", categories), scale: defScale || "big", city: defCity || "",
     date: "", endDate: "", time: "", endTime: "", place: "", placeId: "", description: "",
     usePoll: false, tricount: "", messenger: "", airbnb: "",
     mapsLabel: "", mapsUrl: "", otherLabel: "", otherUrl: "",
@@ -1729,7 +1695,7 @@ function EventForm({ defScale, defCity, initial, onClose, onSave, places, savedP
 
   // quand on change de type, on réaligne les sections par défaut de ce type
   // La catégorie suit le type tant qu'on ne l'a pas choisie soi-même.
-  const switchScale = (s) => setF({ ...f, scale: s, category: f.category === defCat(f.scale) ? defCat(s) : f.category, modules: { ...(s === "big" ? MODULES_BIG : MODULES_DAILY), datePoll: f.usePoll || (s === "big" ? MODULES_BIG : MODULES_DAILY).datePoll } });
+  const switchScale = (s) => setF({ ...f, scale: s, category: f.category === defCat(f.scale, categories) ? defCat(s, categories) : f.category, modules: { ...(s === "big" ? MODULES_BIG : MODULES_DAILY), datePoll: f.usePoll || (s === "big" ? MODULES_BIG : MODULES_DAILY).datePoll } });
 
   const save = () => {
     const links = [];
@@ -1754,7 +1720,7 @@ function EventForm({ defScale, defCity, initial, onClose, onSave, places, savedP
       <Field group label="Nature de l'event"><ScaleSeg value={f.scale} onChange={switchScale} /></Field>
       <Field label="Ça s'appelle comment ?"><input value={f.title} onChange={set("title")} autoFocus={!editing} placeholder={isBig ? "Ex. Nouvel An à Rome" : "Ex. Apéro du jeudi"} /></Field>
       <Field group label="Ville"><CityPicker value={f.city} onChange={(c) => setF({ ...f, city: c })} /></Field>
-      <Field group label="Catégorie"><CatPicker value={f.category} onChange={(c) => setF({ ...f, category: c })} /></Field>
+      <Field group label="Catégorie"><CatPicker value={f.category} keep={initial?.category} onChange={(c) => setF({ ...f, category: c })} /></Field>
 
       {!f.usePoll && (isBig ? (
         <>
@@ -1841,8 +1807,8 @@ function EventForm({ defScale, defCity, initial, onClose, onSave, places, savedP
       </>)}
 
       <div className="form-foot">
-      <button className="btn-primary big" disabled={!f.title.trim() || !f.city || (!f.usePoll && !f.date) || invalid}
-        onClick={save}>{!f.city ? "Choisis une ville"
+      <button className="btn-primary big" disabled={!f.title.trim() || (needCity && !f.city) || (!f.usePoll && !f.date) || invalid}
+        onClick={save}>{needCity && !f.city ? "Choisis une ville"
           : (!f.usePoll && !f.date) ? "Choisis une date (ou un sondage)"
           : dateError ? "Corrige les dates"
           : editing ? "Enregistrer" : "Créer l'event"}</button>
@@ -1915,6 +1881,7 @@ a{text-decoration:none;color:inherit;}
 .hd-kicker{display:inline-flex;align-items:center;gap:6px;color:var(--accent);font-weight:700;font-size:15px;letter-spacing:-.01em;background:var(--accent-soft);padding:7px 14px;border-radius:20px;cursor:pointer;font-family:inherit;border:none;}
 .hd-title-wrap{margin:0;min-width:0;}
 .hd-kicker:active{transform:scale(.97);}
+.hd-badge{font-size:13px;line-height:1;}
 .hd-title{font-size:26px;font-weight:800;margin-top:9px;line-height:1.08;max-width:16ch;}
 .hd-me{flex-shrink:0;width:42px;height:42px;border-radius:14px;background:var(--ink);color:#fff;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;font-family:'Bricolage Grotesque';}
 .hd-menu-wrap{position:relative;flex-shrink:0;}
@@ -2027,7 +1994,6 @@ a{text-decoration:none;color:inherit;}
 .cal-row{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;}
 .cal-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:8px 12px;border-radius:11px;border:1.5px solid var(--line);background:var(--card);font-weight:600;font-size:12.5px;color:var(--ink);transition:.12s;}
 .cal-btn:hover{border-color:var(--accent);color:var(--accent);}
-.cal-hint{display:flex;align-items:center;gap:7px;background:var(--accent-soft);color:var(--accent);font-size:12.5px;font-weight:600;padding:9px 12px;border-radius:12px;margin-bottom:16px;}
 
 .links-box{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px;margin:18px 0;}
 .links-title{font-family:'Bricolage Grotesque';font-weight:700;font-size:15px;margin-bottom:11px;}
@@ -2084,7 +2050,6 @@ a{text-decoration:none;color:inherit;}
 .pollvote.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);}
 .pollinfo{flex:1;min-width:0;font-size:14px;text-transform:capitalize;padding-top:3px;}
 .pollnames{color:var(--muted);font-size:12px;text-transform:none;margin-top:2px;}
-.pollwarn{display:flex;align-items:center;gap:4px;color:#B45309;font-size:12px;text-transform:none;margin-top:3px;font-weight:600;}
 .polllock{flex-shrink:0;width:40px;height:40px;margin-left:4px;border-radius:10px;background:var(--bg);color:var(--muted);display:flex;align-items:center;justify-content:center;border:1px solid var(--line);}
 .polladd{display:flex;align-items:flex-end;gap:8px;margin-top:12px;}
 .polladd-f{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px;}
@@ -2169,10 +2134,6 @@ a{text-decoration:none;color:inherit;}
 .catchip.mod.on{background:var(--accent);color:#fff;border-color:var(--accent);}
 .catchip.mod.locked{opacity:.55;cursor:not-allowed;}
 
-.avail-intro{color:var(--muted);font-size:14px;line-height:1.5;margin:4px 4px 12px;}
-.availrow{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);}
-.availrow-info{flex:1;font-size:14px;}
-.avail-form{margin-top:12px;}
 .field.mini>span{font-size:12px;margin-bottom:5px;}
 .field.mini input{padding:10px 12px;font-size:16px;}
 
