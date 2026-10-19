@@ -28,6 +28,7 @@ import { rememberGroup, openGroup } from "@/lib/actions/group";
 import { notifyNewEvent, notifyEventActivity, notifyAttendees, nudgeEvent } from "@/lib/actions/push";
 // PROTOTYPE — accueils alternatifs, à retirer une fois le choix fait.
 import HubPrototype, { PrototypeSwitcher, prototypeOn } from "./hub-prototype";
+import { ChatBubble } from "./chat-prototype";
 
 // ---------- config ----------
 // Les catégories viennent du catalogue (lib/catalog.ts) ; chaque groupe en
@@ -633,7 +634,13 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
       // Règle 3, versant commentaires. Le texte part dans la notification :
       // le plus souvent il se suffit, et évite d'ouvrir l'app pour rien.
       notifyEventActivity(id, title, `${meName} : ${text}`).catch(() => {});
+      // PROTOTYPE — le chat rattache une réponse au message qu'il vient d'écrire.
+      return cid;
     },
+    // PROTOTYPE — les messages des autres, arrivés en direct.
+    receiveComment: (id, c) => updateEvent(id, (e) =>
+      (e.comments || []).some((x) => x.id === c.id) ? e : { ...e, comments: [...(e.comments || []), c] }),
+    dropComment: (id, cid) => updateEvent(id, (e) => ({ ...e, comments: (e.comments || []).filter((x) => x.id !== cid) })),
     delComment: (id, cid) => {
       updateEvent(id, (e) => ({ ...e, comments: (e.comments || []).filter((c) => c.id !== cid) }));
       persist(() => db.delComment(cid));
@@ -1193,7 +1200,9 @@ function EventDetail({ ev, me, members, actions, onBack, onEdit, places, savedPl
           </div>
         )}
 
-        {modOn(ev, "comments") && <Comments ev={ev} me={me} actions={actions} />}
+        {!compact && modOn(ev, "comments") && <Comments ev={ev} me={me} actions={actions} />}
+        {/* PROTOTYPE — le chat remplace les commentaires, sur tous les events. */}
+        {compact && <ChatBubble ev={ev} me={me} actions={actions} />}
 
         {isCreator && <ModuleToggles ev={ev} actions={actions} />}
         <div className="detail-by">Créé par {nameOf(ev.createdBy)}</div>

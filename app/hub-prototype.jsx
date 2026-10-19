@@ -24,6 +24,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, ChevronDown, CalendarClock, Users, Hand, Check, HelpCircle, X } from "lucide-react";
 
 import { categoryOf } from "@/lib/catalog";
+import { unreadOf } from "./chat-prototype";
 import { cityEmoji } from "@/lib/group";
 
 export const VARIANTS = [
@@ -149,6 +150,7 @@ function Row({ ev, me, group, onOpen, id }) {
           {ev.city && <> · {cityEmoji(group.cities, ev.city)} {ev.city}</>}
           {ev.time && <> · {ev.time}</>}
           <> · <Users size={11} /> {going(ev)}</>
+          {unreadOf(ev, me) > 0 && <span className="px-unread">💬 {unreadOf(ev, me)}</span>}
         </em>
       </span>
       <span className="px-ans" style={{ color: a.color, background: a.soft, borderStyle: answerOf(ev, me) === "none" ? "dashed" : "solid", borderColor: a.color }}>
@@ -463,6 +465,7 @@ const CSS = `
 .px-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
 .px-body b{font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .px-body em{font-style:normal;font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:3px;white-space:nowrap;overflow:hidden;}
+.px-unread{margin-left:6px;padding:0 6px;border-radius:8px;background:var(--accent-soft);color:var(--accent);font-weight:700;}
 .px-ans{flex-shrink:0;font-size:11.5px;font-weight:700;padding:4px 9px;border-radius:20px;border:1.5px solid;}
 .px-past{display:flex;align-items:center;gap:6px;width:100%;margin:14px 0 8px;padding:10px 12px;border:1.5px dashed var(--line);border-radius:12px;background:none;color:var(--muted);font-weight:600;font-size:13px;}
 .px-empty{color:var(--muted);font-size:13.5px;padding:6px 2px;}
