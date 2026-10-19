@@ -103,8 +103,11 @@ carte, la date noyée en deuxième ligne, rien ne distingue ce qui attend un
 geste.
 
 **« À toi de jouer »**, en tête de l'accueil
-- les events à venir sans ta réponse, et les sondages de date ou de lieu où
-  tu n'as pas voté — un seul motif par event, le plus urgent
+- les events à venir sans ta réponse, et les sondages de **date** où tu n'as
+  pas voté — un seul motif par event, le plus urgent. Pas les sondages de
+  lieu : le lieu se règle sans toi
+- **« Tu viens ? » se répond sur place** : J'y vais / Peut-être / Non sous
+  le titre, et la ligne quitte le bloc. Un vote de date ouvre la fiche
 - **tous tes groupes**, l'emoji du groupe sur chaque ligne ; toucher ouvre
   l'event dans son groupe
 - un « peut-être » est une réponse : il n'y revient pas
