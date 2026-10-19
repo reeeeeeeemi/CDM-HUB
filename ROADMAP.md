@@ -111,7 +111,8 @@ geste.
 
 **La liste devient un agenda**, celle du **groupe ouvert**
 - une seule liste : plus d'onglets Big events / Au quotidien, le big event se
-  repère à ✨ et à sa durée
+  repère à ✨ et à sa durée. Le choix big / quotidien **reste à la création** :
+  il règle la durée et qui est notifié
 - intercalaires **« Cette semaine »**, puis un par mois
 - une ligne par event : la date en gros à gauche, une ligne de détails
   (catégorie, ville, heure, nombre de chauds), et **ta réponse** en pastille
@@ -119,11 +120,14 @@ geste.
 - les villes restent un filtre, ouvert sur **« Toutes »**
 - les dates à voter à la fin, le passé replié
 
-**Un calendrier perso**, derrière une bascule **Liste / Calendrier**
+**Un calendrier perso**, derrière une bascule **Liste / Calendrier** sous
+« À toi de jouer » (variante E du prototype)
 - **tous tes groupes** : c'est ton agenda, pas celui d'un groupe
 - un mois en grille, semaine du lundi ; chaque event en barre sur toute sa
   durée, colorée par ta réponse : **vert** j'y vais, **orange** peut-être,
-  **rouge** pas dispo, **gris pointillé** sans réponse
+  **gris pointillé** sans réponse
+- un event **refusé quitte le calendrier** ; il reste dans la liste, pastille
+  rouge, pour pouvoir changer d'avis
 - toucher un jour liste ses events dessous ; « Seulement mes plans » ne
   garde que le vert et l'orange
 - les anniversaires en 🎂 sur la case, sans barre
