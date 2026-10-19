@@ -87,3 +87,73 @@ La ville quitte le menu rapide : avec plusieurs villes ça devient une liste
 - Date moins grasse dans les sondages
 - Bouton **« Ajouter à mon agenda »**, explicite : aujourd'hui on ne comprend
   pas ce qu'il fait
+
+---
+
+# Après le multi-groupes
+
+Décisions arrêtées avec Rémi le 20 octobre 2026, à faire **après l'étape 3**
+(réglages d'admin) et sa mise en prod. Prototype jetable des pistes sur la
+branche `prototype/accueil` (`?variant=B|C|D` sur l'accueil).
+
+## F — Un accueil plus léger
+
+Avec une vingtaine d'events, la liste devient lourde : sept informations par
+carte, la date noyée en deuxième ligne, rien ne distingue ce qui attend un
+geste.
+
+**« À toi de jouer »**, en tête de l'accueil
+- les events à venir sans ta réponse, et les sondages de **date** où tu n'as
+  pas voté — un seul motif par event, le plus urgent. Pas les sondages de
+  lieu : le lieu se règle sans toi
+- **« Tu viens ? » se répond sur place** : J'y vais / Peut-être / Non sous
+  le titre, et la ligne quitte le bloc. Un vote de date ouvre la fiche
+- **tous tes groupes**, l'emoji du groupe sur chaque ligne ; toucher ouvre
+  l'event dans son groupe
+- un « peut-être » est une réponse : il n'y revient pas
+
+**La liste devient un agenda**, celle du **groupe ouvert**
+- une seule liste : plus d'onglets Big events / Au quotidien, le big event se
+  repère à ✨ et à sa durée. Le choix big / quotidien **reste à la création** :
+  il règle la durée et qui est notifié
+- intercalaires **« Cette semaine »**, puis un par mois
+- une ligne par event : la date en gros à gauche, une ligne de détails
+  (catégorie, ville, heure, nombre de chauds), et **ta réponse** en pastille
+  à droite
+- les villes restent un filtre, ouvert sur **« Toutes »**
+- les dates à voter à la fin, le passé replié
+
+**Un calendrier perso**, derrière une bascule **Liste / Calendrier** sous
+« À toi de jouer » (variante E du prototype)
+- **tous tes groupes** : c'est ton agenda, pas celui d'un groupe
+- un mois en grille, semaine du lundi ; chaque event en barre sur toute sa
+  durée, colorée par ta réponse : **vert** j'y vais, **orange** peut-être,
+  **gris pointillé** sans réponse
+- un event **refusé quitte le calendrier** ; il reste dans la liste, pastille
+  rouge, pour pouvoir changer d'avis
+- toucher un jour liste ses events dessous ; « Seulement mes plans » ne
+  garde que le vert et l'orange
+- les anniversaires en 🎂 sur la case, sans barre
+
+## G — Un chat par event
+
+Décidé le 20 octobre 2026, à faire **après l'accueil** (F).
+
+- **Il remplace les Commentaires** : même table, les messages existants sont
+  gardés. Plus une section à cocher : **chaque event a son chat**
+- **En temps réel** (Supabase Realtime) : un message apparaît chez les autres
+  sans recharger
+- **Une bulle flottante** en bas à droite de la fiche, qui ouvre le chat
+  par-dessus ; le champ de saisie collé en bas, comme une messagerie
+- **Non lus** : 💬 et le nombre sur la ligne de l'event dans l'agenda. Sur la
+  fiche, la bulle ne porte qu'un **point rouge**, sans chiffre, et **rebondit** une
+  fois quand un message arrive pendant qu'on la lit. Demande de retenir, par personne et par event, le dernier message
+  lu
+- **Tout le groupe écrit**, même sans avoir répondu : on peut demander l'heure
+  avant de se décider
+- **Fonctions** : texte, supprimer le sien, réactions emoji (appui long),
+  répondre à un message précis. Pas de photos pour l'instant
+- **Notifications** : les « je viens » et « peut-être » de l'event, plus son
+  créateur, jamais l'auteur du message. **Une seule notification par event**
+  tant que le chat n'a pas été ouvert depuis. Un interrupteur dans les
+  Réglages pour les couper

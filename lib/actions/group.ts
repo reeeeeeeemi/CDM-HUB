@@ -130,3 +130,83 @@ export async function setGroupMuted(groupId: string, muted: boolean) {
   revalidatePath("/reglages");
   return {};
 }
+
+export type GroupEdit = {
+  name: string;
+  emoji: string;
+  tagline: string;
+  cities: City[];
+  categories: string[];
+};
+
+/**
+ * L'admin retouche son groupe. La politique « l'admin modifie son groupe »
+ * fait le contrôle : pour un autre, la mise à jour ne touche aucune ligne,
+ * et on le dit plutôt que de faire croire que c'est enregistré.
+ */
+export async function updateGroup(groupId: string, g: GroupEdit): Promise<{ error?: string }> {
+  const name = g.name.trim();
+  if (!name) return { error: "Donne un nom au groupe." };
+  if (name.length > 40) return { error: "Quarante caractères maximum pour le nom." };
+
+  const categories = [...new Set(g.categories)].filter((k) => CATEGORIES[k] && k !== "autre");
+  if (categories.length < MIN_CATEGORIES || categories.length > MAX_CATEGORIES) {
+    return { error: `Choisis de ${MIN_CATEGORIES} à ${MAX_CATEGORIES} catégories.` };
+  }
+  const cities = g.cities
+    .map((c) => ({ name: c.name.trim(), emoji: c.emoji.trim() || "📍" }))
+    .filter((c, i, all) => c.name && all.findIndex((x) => x.name.toLowerCase() === c.name.toLowerCase()) === i);
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("groups")
+    .update({ name, emoji: g.emoji.trim() || null, tagline: g.tagline.trim() || null, cities, categories })
+    .eq("id", groupId)
+    .select("id");
+  if (error) return { error: error.message };
+  if (!data?.length) return { error: "Seul un admin peut modifier le groupe." };
+
+  revalidatePath("/", "layout");
+  return {};
+}
+
+/** Nommer un admin, ou lui retirer ce rôle. La base garde toujours un admin. */
+export async function setMemberRole(groupId: string, userId: string, role: "admin" | "member") {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_member_role", { g: groupId, u: userId, new_role: role });
+  if (error) return { error: error.message };
+  revalidatePath("/groupe");
+  return {};
+}
+
+/** Retirer quelqu'un du groupe. Ses events et messages restent, signés. */
+export async function removeMember(groupId: string, userId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("remove_member", { g: groupId, u: userId });
+  if (error) return { error: error.message };
+  revalidatePath("/groupe");
+  return {};
+}
+
+/**
+ * Quitter le groupe. Le dernier admin doit d'abord passer la main — sauf
+ * s'il est seul, et le groupe part alors avec lui. On rouvre ensuite un
+ * autre de ses groupes, ou l'écran sans groupe.
+ */
+export async function leaveGroup(groupId: string): Promise<{ error?: string }> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("leave_group", { g: groupId });
+  if (error) return { error: error.message };
+  (await cookies()).delete(GROUP_COOKIE);
+  redirect("/");
+}
+
+/** Supprimer le groupe et tout son contenu. Réservé à l'admin, sans retour. */
+export async function deleteGroup(groupId: string): Promise<{ error?: string }> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("groups").delete().eq("id", groupId).select("id");
+  if (error) return { error: error.message };
+  if (!data?.length) return { error: "Seul un admin peut supprimer le groupe." };
+  (await cookies()).delete(GROUP_COOKIE);
+  redirect("/");
+}

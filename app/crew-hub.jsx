@@ -937,6 +937,9 @@ function Header({ meName, onSignOut, onHome, notifyCity, onSetCity, group, group
                 </>
               )}
 
+              <a className="hd-menu-link" href="/groupe">
+                <Users size={15} /> Le groupe
+              </a>
               <a className="hd-menu-link" href="/lieux">
                 <House size={15} /> Nos lieux
               </a>
