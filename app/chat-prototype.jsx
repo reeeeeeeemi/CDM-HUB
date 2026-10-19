@@ -235,7 +235,7 @@ const CSS = `
 .ch-bubble{position:fixed;right:18px;bottom:calc(22px + env(safe-area-inset-bottom));z-index:45;width:58px;height:58px;border-radius:50%;border:0;
   background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 10px 26px rgba(180,69,31,.38);}
 .ch-bubble:active{transform:scale(.95);}
-.ch-dot{position:absolute;top:3px;right:3px;width:13px;height:13px;border-radius:50%;background:var(--ink);border:2.5px solid var(--bg);}
+.ch-dot{position:absolute;top:3px;right:3px;width:13px;height:13px;border-radius:50%;background:#EF4444;border:2.5px solid var(--bg);}
 .ch-bubble.bump{animation:ch-bump .65s ease;}
 @keyframes ch-bump{0%,100%{transform:translateY(0)}30%{transform:translateY(-10px)}55%{transform:translateY(0)}75%{transform:translateY(-4px)}}
 
