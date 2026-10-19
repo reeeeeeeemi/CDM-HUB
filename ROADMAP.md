@@ -134,3 +134,25 @@ geste.
 - toucher un jour liste ses events dessous ; « Seulement mes plans » ne
   garde que le vert et l'orange
 - les anniversaires en 🎂 sur la case, sans barre
+
+## G — Un chat par event
+
+Décidé le 20 octobre 2026, à faire **après l'accueil** (F).
+
+- **Il remplace les Commentaires** : même table, les messages existants sont
+  gardés. Plus une section à cocher : **chaque event a son chat**
+- **En temps réel** (Supabase Realtime) : un message apparaît chez les autres
+  sans recharger
+- **Une bulle flottante** en bas à droite de la fiche, qui ouvre le chat
+  par-dessus ; le champ de saisie collé en bas, comme une messagerie
+- **Non lus** : un chiffre sur la bulle, et 💬 sur la ligne de l'event dans
+  l'agenda. Demande de retenir, par personne et par event, le dernier message
+  lu
+- **Tout le groupe écrit**, même sans avoir répondu : on peut demander l'heure
+  avant de se décider
+- **Fonctions** : texte, supprimer le sien, réactions emoji (appui long),
+  répondre à un message précis. Pas de photos pour l'instant
+- **Notifications** : les « je viens » et « peut-être » de l'event, plus son
+  créateur, jamais l'auteur du message. **Une seule notification par event**
+  tant que le chat n'a pas été ouvert depuis. Un interrupteur dans les
+  Réglages pour les couper
