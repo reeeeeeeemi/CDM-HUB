@@ -244,7 +244,7 @@ const CSS = `
   box-shadow:0 -10px 40px rgba(0,0,0,.18);}
 .ch-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px 12px;background:var(--card);border-bottom:1px solid var(--line);}
 .ch-head div{display:flex;flex-direction:column;min-width:0;}
-.ch-head b{font-family:'Bricolage Grotesque',system-ui;font-size:17px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ch-head b{font-family:'Bricolage Grotesque';font-size:17px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .ch-head em{font-style:normal;font-size:12px;color:var(--muted);}
 .ch-head button{display:flex;border:0;background:var(--bg);border-radius:10px;padding:7px;color:var(--ink);}
 
@@ -253,7 +253,7 @@ const CSS = `
 .ch-day{align-self:center;margin:12px 0 6px;padding:3px 10px;border-radius:10px;background:var(--line);color:var(--muted);font-size:11.5px;font-weight:700;text-transform:capitalize;}
 .ch-msg{display:flex;align-items:flex-end;gap:7px;max-width:86%;}
 .ch-msg.mine{align-self:flex-end;flex-direction:row-reverse;}
-.ch-av{flex-shrink:0;width:28px;height:28px;border-radius:50%;background:var(--ink);color:#fff;font:700 11px/28px system-ui;text-align:center;}
+.ch-av{flex-shrink:0;width:28px;height:28px;border-radius:50%;background:var(--ink);color:#fff;font-family:'Bricolage Grotesque';font-weight:700;font-size:11px;line-height:28px;text-align:center;}
 .ch-col{display:flex;flex-direction:column;min-width:0;}
 .ch-msg.mine .ch-col{align-items:flex-end;}
 .ch-name{font-size:11.5px;font-weight:700;color:var(--muted);margin:6px 0 2px 10px;}
@@ -283,7 +283,7 @@ const CSS = `
 .ch-replying b{color:var(--accent);}
 .ch-replying button{display:flex;border:0;background:none;color:var(--muted);}
 .ch-row{display:flex;align-items:flex-end;gap:8px;}
-.ch-row textarea{flex:1;resize:none;max-height:120px;padding:10px 14px;border:1.5px solid var(--line);border-radius:20px;font:16px/1.3 inherit;
+.ch-row textarea{flex:1;resize:none;max-height:120px;padding:10px 14px;border:1.5px solid var(--line);border-radius:20px;font-family:inherit;font-size:16px;line-height:1.3;
   background:var(--bg);color:var(--ink);outline:none;}
 .ch-row textarea:focus{border-color:var(--accent);}
 .ch-send{flex-shrink:0;width:42px;height:42px;border-radius:50%;border:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;}

@@ -2166,9 +2166,10 @@ a{text-decoration:none;color:inherit;}
 /* Une teinte de la catégorie, plus franche en haut, qui se fond dans la page :
    on reconnaît le plan d'un coup d'œil sans l'aplat d'autrefois. */
 .note{margin:18px 0;padding:14px 16px 12px;background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:0 2px 10px rgba(33,29,43,.04);}
-.note-head{display:flex;align-items:center;gap:9px;margin-bottom:10px;font-size:13px;color:var(--muted);}
-.note-head b{color:var(--ink);}
-.note-av{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:var(--c);color:#fff;font:700 11px/1 system-ui;}
+/* Même titre que les autres sections de la fiche (.block-head). */
+.note-head{display:flex;align-items:center;gap:9px;margin-bottom:10px;font-family:'Bricolage Grotesque';font-weight:700;font-size:16px;color:var(--muted);}
+.note-head b{color:var(--ink);font-weight:700;}
+.note-av{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:var(--c);color:#fff;font-family:'Bricolage Grotesque';font-weight:700;font-size:11px;}
 .note-body{position:relative;font-size:15px;line-height:1.55;color:var(--ink);overflow:hidden;}
 .note-body.folded{max-height:150px;}
 .note-body.folded::after{content:"";position:absolute;left:0;right:0;bottom:0;height:46px;background:linear-gradient(transparent, var(--card));}
@@ -2189,10 +2190,10 @@ a{text-decoration:none;color:inherit;}
 .dh-main{display:flex;align-items:center;gap:12px;margin-top:14px;}
 .dh-emoji{flex-shrink:0;display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:15px;font-size:25px;
   background:var(--c);box-shadow:0 6px 16px color-mix(in srgb, var(--c) 35%, transparent);}
-.dh-title{font-family:'Bricolage Grotesque',system-ui;font-size:23px;font-weight:800;line-height:1.1;letter-spacing:-.4px;}
+.dh-title{font-family:'Bricolage Grotesque';font-size:23px;font-weight:800;line-height:1.1;letter-spacing:-.4px;}
 .dh-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-top:10px;font-size:13px;color:var(--muted);}
 .dh-meta span{display:inline-flex;align-items:center;gap:4px;}
-.dh-cd{padding:3px 9px;border-radius:9px;font-weight:700;background:var(--c);color:#fff;}
+.dh-cd{padding:3px 9px;border-radius:9px;font-family:'Bricolage Grotesque';font-weight:700;font-size:13.5px;background:var(--c);color:#fff;}
 .dh-ic{border-color:color-mix(in srgb, var(--c) 25%, var(--line));}
 .detail-hero{padding:16px 18px 30px;color:#fff;border-radius:0 0 26px 26px;}
 .detail-emoji{font-size:44px;margin:16px 0 10px;}
