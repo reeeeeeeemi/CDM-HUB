@@ -773,7 +773,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
             </div>
           )}
           {selectedEvent ? (
-            <EventDetail ev={selectedEvent} me={me} members={members} actions={actions} onBack={closeEvent} onEdit={() => setModal("edit")} places={places} savedPlaces={savedPlaces} />
+            <EventDetail compact={variant !== "A"} ev={selectedEvent} me={me} members={members} actions={actions} onBack={closeEvent} onEdit={() => setModal("edit")} places={places} savedPlaces={savedPlaces} />
           ) : (
             <>
           <main className="wrap">
@@ -985,7 +985,7 @@ function EventCard({ ev, me, onOpen, past }) {
 }
 
 // ---------- event detail ----------
-function EventDetail({ ev, me, members, actions, onBack, onEdit, places, savedPlaces }) {
+function EventDetail({ ev, me, members, actions, onBack, onEdit, places, savedPlaces, compact = false }) {
   const [confirmDel, setConfirmDel] = useState(false);
   const cities = useCities();
   const [shared, setShared] = useState(false);
@@ -1027,9 +1027,41 @@ function EventDetail({ ev, me, members, actions, onBack, onEdit, places, savedPl
     ? (ev.endTime ? `${ev.time} – ${ev.endTime}${overnight ? " (le lendemain)" : ""}` : ev.time)
     : "";
 
+  // PROTOTYPE — en-tête compact : la couleur en accent, plus en aplat.
+  const head = compact ? (
+    <div className="dh">
+      <div className="dh-top">
+        <button className="dh-ic" onClick={onBack} aria-label="Retour"><ChevronLeft size={19} /></button>
+        <div className="dh-acts">
+          {ev.date && <button className={"dh-ic" + (calOpen ? " on" : "")} aria-label="Ajouter à mon agenda" aria-expanded={calOpen} onClick={() => setCalOpen((o) => !o)}><CalendarPlus size={17} /></button>}
+          <button className="dh-ic" aria-label="Partager" onClick={share}>{shared ? <Check size={17} /> : <Share2 size={17} />}</button>
+        </div>
+      </div>
+      {calOpen && (
+        <div className="dh-cal">
+          <button className="cal-btn" onClick={() => { downloadICS(ev); setCalOpen(false); }}>Apple / iCal</button>
+          <a className="cal-btn" href={googleCalUrl(ev)} target="_blank" rel="noopener noreferrer">Google Agenda</a>
+        </div>
+      )}
+      <div className="dh-main">
+        <span className="dh-emoji" style={{ background: cat.color + "1A" }}>{cat.emoji}</span>
+        <h1 className="dh-title">{ev.title}</h1>
+      </div>
+      <div className="dh-meta">
+        <span style={{ color: cat.color, fontWeight: 700 }}>{cat.label}</span>
+        {isBig && <span><Sparkles size={12} /> Big event</span>}
+        {ev.city && <span>{cities.emoji(ev.city)} {ev.city}</span>}
+        {ev.date ? (cd && !cd.past && <span className="dh-cd" style={{ color: cat.color, background: cat.color + "14" }}>{cd.text}</span>)
+          : <span className="dh-cd" style={{ color: cat.color, background: cat.color + "14" }}><CalendarClock size={12} /> Date à voter</span>}
+        {!ev.place && modOn(ev, "placePoll") && <span className="dh-cd" style={{ color: cat.color, background: cat.color + "14" }}><MapPinned size={12} /> Lieu à voter</span>}
+      </div>
+    </div>
+  ) : null;
+
   return (
     <div className="detail">
-      <div className="detail-hero" style={{ background: `linear-gradient(135deg, ${cat.color}, color-mix(in srgb, ${cat.color} 78%, #000))` }}>
+      {head}
+      {!compact && <div className="detail-hero" style={{ background: `linear-gradient(135deg, ${cat.color}, color-mix(in srgb, ${cat.color} 78%, #000))` }}>
         <div className="detail-top">
           <button className="ghost-btn light sm" onClick={onBack}><ChevronLeft size={15} /> Retour</button>
           <button className="ghost-btn light sm" onClick={share}>
@@ -1063,7 +1095,7 @@ function EventDetail({ ev, me, members, actions, onBack, onEdit, places, savedPl
           {ev.date ? (cd && !cd.past && <div className="detail-cd">{cd.text}</div>) : <div className="detail-cd"><CalendarClock size={13} /> Date à voter</div>}
           {!ev.place && modOn(ev, "placePoll") && <div className="detail-cd"><MapPinned size={13} /> Lieu à voter</div>}
         </div>
-      </div>
+      </div>}
 
       <div className="wrap">
         <div className="info-row"><CalendarDays size={18} /><div><b>{fmtRange(ev.date, ev.endDate)}</b>{timeLabel && <span className="soft"> · {timeLabel}</span>}</div></div>
@@ -2036,6 +2068,18 @@ a{text-decoration:none;color:inherit;}
 /* La fiche vit désormais sous le header : elle ne doit plus réclamer
    toute la hauteur de l'écran, sinon la page dépasse d'autant. */
 .detail{min-height:auto;}
+.dh{padding:10px 18px 4px;}
+.dh-top{display:flex;align-items:center;justify-content:space-between;}
+.dh-acts{display:flex;gap:6px;}
+.dh-ic{display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);}
+.dh-ic.on{background:var(--ink);color:#fff;border-color:var(--ink);}
+.dh-cal{display:flex;justify-content:flex-end;gap:8px;margin-top:8px;}
+.dh-main{display:flex;align-items:center;gap:12px;margin-top:14px;}
+.dh-emoji{flex-shrink:0;display:flex;align-items:center;justify-content:center;width:46px;height:46px;border-radius:14px;font-size:24px;}
+.dh-title{font-family:'Bricolage Grotesque',system-ui;font-size:23px;font-weight:800;line-height:1.1;letter-spacing:-.4px;}
+.dh-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-top:10px;font-size:13px;color:var(--muted);}
+.dh-meta span{display:inline-flex;align-items:center;gap:4px;}
+.dh-cd{padding:3px 9px;border-radius:9px;font-weight:700;}
 .detail-hero{padding:16px 18px 30px;color:#fff;border-radius:0 0 26px 26px;}
 .detail-emoji{font-size:44px;margin:16px 0 10px;}
 .detail-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
