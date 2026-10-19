@@ -19,6 +19,13 @@ const hosts = lanHosts();
 const ports = ["3000", "3001"];
 
 const nextConfig: NextConfig = {
+  // Les versions de test de Vercel tournent sur la pré-prod (voir
+  // lib/supabase/env.ts). VERCEL_ENV n'existe qu'au build sur Vercel : on le
+  // grave dans le code, navigateur compris.
+  env: {
+    HUB_STAGE: process.env.VERCEL_ENV === "preview" ? "preview" : "",
+  },
+
   // Laisse le téléphone charger /_next/* et le rechargement à chaud.
   allowedDevOrigins: hosts,
 
