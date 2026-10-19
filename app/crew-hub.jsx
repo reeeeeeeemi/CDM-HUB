@@ -1150,7 +1150,9 @@ function EventDetail({ ev, me, members, actions, onBack, onEdit, places, savedPl
           </div>
         )}
 
-        {ev.description && <div className="detail-desc">{ev.description}</div>}
+        {ev.description && (compact
+          ? <OrganizerNote text={ev.description} by={ev.createdBy} color={cat.color} />
+          : <div className="detail-desc">{ev.description}</div>)}
 
         <div className="rsvp-box">
           <div className="rsvp-q">Tu es chaud ?</div>
@@ -1224,6 +1226,63 @@ function EventDetail({ ev, me, members, actions, onBack, onEdit, places, savedPl
         ))}
       </div>
     </div>
+  );
+}
+
+// ---------- le mot de l'organisateur (PROTOTYPE) ----------
+const URL_RE = /(https?:\/\/[^\s]+|www\.[^\s]+)/;
+// Sans drapeau g : un test répété ne garde pas de position d'un appel à l'autre.
+const IS_URL = /^(https?:\/\/|www\.)/;
+
+/** Les liens deviennent cliquables, le reste reste du texte. */
+function linkify(line) {
+  return line.split(URL_RE).map((part, i) =>
+    IS_URL.test(part)
+      ? <a key={i} href={normUrl(part)} target="_blank" rel="noopener noreferrer">{part.replace(/^https?:\/\//, "")}</a>
+      : part);
+}
+
+/**
+ * La description lue comme ce qu'elle est : un message de l'organisateur.
+ * Des paragraphes séparés par une ligne vide, des lignes en « - » qui
+ * deviennent une vraie liste, et un pli au-delà de quelques lignes.
+ */
+function OrganizerNote({ text, by, color }) {
+  const [open, setOpen] = useState(false);
+  const [long, setLong] = useState(false);
+  const body = useRef(null);
+  useEffect(() => {
+    const el = body.current;
+    if (el) setLong(el.scrollHeight > 168);
+  }, [text]);
+
+  const blocks = text.trim().split(/\n\s*\n/).map((block, b) => {
+    const lines = block.split("\n").map((l) => l.trim()).filter(Boolean);
+    const out = [];
+    let list = [];
+    const flush = () => { if (list.length) { out.push(<ul key={`l${out.length}`}>{list.map((x, i) => <li key={i}>{linkify(x)}</li>)}</ul>); list = []; } };
+    for (const l of lines) {
+      const m = l.match(/^[-•*]\s+(.*)$/);
+      if (m) list.push(m[1]);
+      else { flush(); out.push(<p key={`p${out.length}`}>{linkify(l)}</p>); }
+    }
+    flush();
+    return <div className="note-block" key={b}>{out}</div>;
+  });
+
+  return (
+    <section className="note" style={{ "--c": color }}>
+      <div className="note-head">
+        <span className="note-av">{initials(nameOf(by))}</span>
+        <span>Le mot de <b>{nameOf(by)}</b></span>
+      </div>
+      <div className={"note-body" + (long && !open ? " folded" : "")} ref={body}>{blocks}</div>
+      {long && (
+        <button className="note-more" onClick={() => setOpen((o) => !o)}>
+          {open ? "Réduire" : "Lire la suite"} <ChevronDown size={15} style={{ transform: open ? "rotate(180deg)" : "" }} />
+        </button>
+      )}
+    </section>
   );
 }
 
@@ -2106,6 +2165,20 @@ a{text-decoration:none;color:inherit;}
 .detail{min-height:auto;}
 /* Une teinte de la catégorie, plus franche en haut, qui se fond dans la page :
    on reconnaît le plan d'un coup d'œil sans l'aplat d'autrefois. */
+.note{margin:18px 0;padding:14px 16px 12px;background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:0 2px 10px rgba(33,29,43,.04);}
+.note-head{display:flex;align-items:center;gap:9px;margin-bottom:10px;font-size:13px;color:var(--muted);}
+.note-head b{color:var(--ink);}
+.note-av{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:var(--c);color:#fff;font:700 11px/1 system-ui;}
+.note-body{position:relative;font-size:15px;line-height:1.55;color:var(--ink);overflow:hidden;}
+.note-body.folded{max-height:150px;}
+.note-body.folded::after{content:"";position:absolute;left:0;right:0;bottom:0;height:46px;background:linear-gradient(transparent, var(--card));}
+.note-block+.note-block{margin-top:11px;}
+.note-body p+p,.note-body p+ul,.note-body ul+p{margin-top:4px;}
+.note-body ul{margin:4px 0 0;padding:0;list-style:none;}
+.note-body li{position:relative;padding-left:18px;margin-top:3px;}
+.note-body li::before{content:"";position:absolute;left:5px;top:.62em;width:6px;height:6px;border-radius:50%;background:var(--c);}
+.note-body a{color:var(--c);font-weight:600;text-decoration:underline;text-underline-offset:2px;word-break:break-all;}
+.note-more{display:flex;align-items:center;gap:4px;margin-top:8px;padding:0;border:0;background:none;color:var(--c);font-weight:700;font-size:13.5px;}
 .dh{padding:10px 18px 18px;border-radius:0 0 24px 24px;
   background:linear-gradient(180deg, color-mix(in srgb, var(--c) 26%, var(--bg)) 0%, color-mix(in srgb, var(--c) 9%, var(--bg)) 100%);}
 .dh-top{display:flex;align-items:center;justify-content:space-between;}
