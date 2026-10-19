@@ -67,15 +67,32 @@ export function ChatBubble({ ev, me, actions }) {
   useLiveComments(ev.id, actions);
   const unread = open ? 0 : unreadOf(ev, me);
 
+  // Un message qui arrive pendant qu'on lit la fiche : la bulle rebondit une
+  // fois. Pas au chargement — ce qui attendait déjà n'est pas une arrivée.
+  const seen = useRef(null);
+  const [bump, setBump] = useState(false);
+  useEffect(() => {
+    if (seen.current !== null && unread > seen.current) {
+      setBump(true);
+      const t = setTimeout(() => setBump(false), 700);
+      seen.current = unread;
+      return () => clearTimeout(t);
+    }
+    seen.current = unread;
+  }, [unread]);
+
   const close = () => { markRead(ev.id); setOpen(false); tick((n) => n + 1); };
 
   return (
     <>
       <style>{CSS}</style>
       {!open && (
-        <button className="ch-bubble" aria-label="Ouvrir le chat" onClick={() => setOpen(true)}>
+        <button className={"ch-bubble" + (bump ? " bump" : "")} onClick={() => setOpen(true)}
+          aria-label={unread > 0 ? `Ouvrir le chat, ${unread} nouveau${unread > 1 ? "x" : ""} message${unread > 1 ? "s" : ""}` : "Ouvrir le chat"}>
           <MessageCircle size={24} />
-          {unread > 0 && <span className="ch-badge">{unread > 9 ? "9+" : unread}</span>}
+          {/* Un point, pas un compteur : sur la fiche on sait déjà de quel
+              plan il s'agit, le chiffre est dans l'agenda. */}
+          {unread > 0 && <span className="ch-dot" />}
         </button>
       )}
       {open && <ChatSheet ev={ev} me={me} actions={actions} onClose={close} />}
@@ -218,8 +235,9 @@ const CSS = `
 .ch-bubble{position:fixed;right:18px;bottom:calc(22px + env(safe-area-inset-bottom));z-index:45;width:58px;height:58px;border-radius:50%;border:0;
   background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 10px 26px rgba(180,69,31,.38);}
 .ch-bubble:active{transform:scale(.95);}
-.ch-badge{position:absolute;top:-3px;right:-3px;min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:#DC2626;color:#fff;
-  font:700 12px/22px system-ui;border:2px solid var(--bg);}
+.ch-dot{position:absolute;top:3px;right:3px;width:13px;height:13px;border-radius:50%;background:var(--ink);border:2.5px solid var(--bg);}
+.ch-bubble.bump{animation:ch-bump .65s ease;}
+@keyframes ch-bump{0%,100%{transform:translateY(0)}30%{transform:translateY(-10px)}55%{transform:translateY(0)}75%{transform:translateY(-4px)}}
 
 .ch-overlay{position:fixed;inset:0;z-index:70;background:rgba(20,16,28,.35);display:flex;align-items:flex-end;justify-content:center;}
 .ch-sheet{width:100%;max-width:560px;height:88dvh;background:var(--bg);border-radius:22px 22px 0 0;display:flex;flex-direction:column;overflow:hidden;
