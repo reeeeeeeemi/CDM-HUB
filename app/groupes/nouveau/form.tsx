@@ -2,11 +2,13 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { ChevronLeft, Users, MapPin, Shapes, Plus, X } from "lucide-react";
+import { ChevronLeft, Users, MapPin, Shapes } from "lucide-react";
 
 import { CATEGORIES, FAMILIES, MAX_CATEGORIES, MIN_CATEGORIES } from "@/lib/catalog";
 import type { City } from "@/lib/group";
 import type { NewGroup } from "@/lib/actions/group";
+
+import CitySearch from "./city-search";
 
 type Props = {
   /** Le dernier pseudo utilisé, proposé d'office. */
@@ -27,8 +29,6 @@ export default function NewGroupForm({ pseudo, canGoBack, onCreate }: Props) {
   const [nick, setNick] = useState(pseudo);
   const [tagline, setTagline] = useState("");
   const [cities, setCities] = useState<City[]>([]);
-  const [cityName, setCityName] = useState("");
-  const [cityEmoji, setCityEmoji] = useState("");
   const [picked, setPicked] = useState<string[]>([]);
   const [err, setErr] = useState("");
   const [pending, start] = useTransition();
@@ -37,14 +37,6 @@ export default function NewGroupForm({ pseudo, canGoBack, onCreate }: Props) {
 
   const toggle = (k: string) =>
     setPicked((p) => (p.includes(k) ? p.filter((x) => x !== k) : full ? p : [...p, k]));
-
-  const addCity = () => {
-    const n = cityName.trim();
-    if (!n || cities.some((c) => c.name.toLowerCase() === n.toLowerCase())) return;
-    setCities([...cities, { name: n, emoji: cityEmoji.trim() || "📍" }]);
-    setCityName("");
-    setCityEmoji("");
-  };
 
   // Le bouton dit ce qui manque, plutôt que de rester grisé sans raison.
   const missing = !name.trim()
@@ -97,22 +89,7 @@ export default function NewGroupForm({ pseudo, canGoBack, onCreate }: Props) {
       <section className="rg-sec">
         <h2><MapPin size={16} /> Vos villes <em className="ng-opt">· facultatif</em></h2>
         <p className="rg-hint">Elles servent à filtrer les plans du quotidien. Sans ville, tout s&apos;affiche ensemble.</p>
-        {cities.length > 0 && (
-          <div className="rg-chips ng-cities">
-            {cities.map((c) => (
-              <span className="rg-chip on ng-city" key={c.name}>
-                {c.emoji} {c.name}
-                <button type="button" aria-label={`Retirer ${c.name}`} onClick={() => setCities(cities.filter((x) => x.name !== c.name))}><X size={13} /></button>
-              </span>
-            ))}
-          </div>
-        )}
-        <div className="ng-name rg-field">
-          <input className="ng-emoji" value={cityEmoji} onChange={(e) => setCityEmoji(e.target.value)} placeholder="📍" maxLength={8} aria-label="Emoji de la ville" />
-          <input value={cityName} onChange={(e) => setCityName(e.target.value)} placeholder="Ex. Lyon"
-            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCity(); } }} aria-label="Ville" />
-          <button type="button" className="rg-btn sm" onClick={addCity} disabled={!cityName.trim()} aria-label="Ajouter la ville"><Plus size={16} /></button>
-        </div>
+        <CitySearch cities={cities} onChange={setCities} />
       </section>
 
       <section className="rg-sec">
