@@ -5,8 +5,8 @@
  *
  *  Question : comment alléger l'accueil quand les events s'accumulent ?
  *  Quatre accueils sur la route existante, ?variant=A|B|C|D, avec les
- *  vrais events du groupe. Lecture seule : toucher un event ouvre la
- *  vraie fiche, rien d'autre n'écrit.
+ *  vrais events du groupe. Toucher un event ouvre la vraie fiche ; seule
+ *  la réponse depuis « À toi de jouer » écrit, par l'action de l'appli.
  *
  *    A  l'actuel, pour comparer
  *    B  Agenda : « À toi de jouer », puis intercalaires par mois
@@ -21,7 +21,7 @@
  * ==================================================================== */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, ChevronDown, CalendarClock, MapPinned, Users, Hand } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown, CalendarClock, Users, Hand, Check, HelpCircle, X } from "lucide-react";
 
 import { categoryOf } from "@/lib/catalog";
 import { cityEmoji } from "@/lib/group";
@@ -63,25 +63,34 @@ const mondayOf = (d) => addDays(d, -((d.getDay() + 6) % 7));
 
 /**
  * Ce qui attend un geste de ta part, sur les plans à venir : un sondage de
- * date ou de lieu où tu n'as pas voté, sinon une réponse que tu n'as pas
- * donnée. Un seul motif par event, le plus urgent.
+ * date où tu n'as pas voté, sinon une réponse que tu n'as pas donnée. Un
+ * seul motif par event, le plus urgent. Le lieu, lui, ne réclame rien : il
+ * se règle sans toi.
  */
 function toPlay(events, me) {
   return events
     .filter((ev) => !isPast(ev))
     .flatMap((ev) => {
       const votedDate = (ev.datePoll || []).some((o) => o.votes.includes(me));
-      const votedPlace = (ev.placePoll || []).some((o) => o.votes.includes(me));
       if (!ev.date && (ev.datePoll || []).length > 0 && !votedDate) return [{ ev, why: "Vote pour la date", icon: CalendarClock }];
-      if (!ev.place && (ev.placePoll || []).length > 0 && !votedPlace) return [{ ev, why: "Vote pour le lieu", icon: MapPinned }];
-      if (!ev.rsvps?.[me]) return [{ ev, why: "Tu viens ?", icon: Hand }];
+      if (!ev.rsvps?.[me]) return [{ ev, why: "Tu viens ?", icon: Hand, rsvp: true }];
       return [];
     })
     .sort((a, b) => (a.ev.date || "9999").localeCompare(b.ev.date || "9999"));
 }
 
 // ---------- briques communes ----------
-function ToPlay({ events, me, onOpen }) {
+const QUICK = [
+  ["in", "J'y vais", Check],
+  ["maybe", "Peut-être", HelpCircle],
+  ["out", "Non", X],
+];
+
+/**
+ * « Tu viens ? » se répond sur place : trois boutons sous le titre, et la
+ * ligne quitte le bloc. Un vote de date, lui, demande la fiche.
+ */
+function ToPlay({ events, me, onOpen, onRsvp }) {
   const items = useMemo(() => toPlay(events, me), [events, me]);
   const [all, setAll] = useState(false);
   if (items.length === 0) return <div className="px-done">Tu es à jour sur tous les plans 👌</div>;
@@ -89,12 +98,26 @@ function ToPlay({ events, me, onOpen }) {
   return (
     <section className="px-play">
       <h2>À toi de jouer <span>{items.length}</span></h2>
-      {shown.map(({ ev, why, icon: Icon }) => (
-        <button key={ev.id} className="px-play-row" onClick={() => onOpen(ev.id)}>
-          <span className="px-play-ic"><Icon size={15} /></span>
-          <span className="px-play-txt"><b>{ev.title}</b><em>{why}</em></span>
-          <ChevronRight size={16} />
-        </button>
+      {shown.map(({ ev, why, icon: Icon, rsvp }) => (
+        <div key={ev.id} className="px-play-item">
+          <button className="px-play-row" onClick={() => onOpen(ev.id)}>
+            <span className="px-play-ic"><Icon size={15} /></span>
+            <span className="px-play-txt">
+              <b>{ev.title}</b>
+              <em>{why}{ev.date && <span> · {parse(ev.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}</span>}</em>
+            </span>
+            <ChevronRight size={16} />
+          </button>
+          {rsvp && onRsvp && (
+            <div className="px-quick">
+              {QUICK.map(([k, label, I]) => (
+                <button key={k} style={{ "--a": ANSWER[k].color, "--s": ANSWER[k].soft }} onClick={() => onRsvp(ev.id, k)}>
+                  <I size={14} /> {label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       ))}
       {items.length > 3 && (
         <button className="px-more" onClick={() => setAll(!all)}>{all ? "Moins" : `Voir les ${items.length - 3} autres`}</button>
@@ -185,10 +208,10 @@ function Agenda({ events, me, group, onOpen, anchors = false }) {
 }
 
 // ---------- B : agenda ----------
-function VariantB({ events, filtered, me, group, onOpen, toPlay = true }) {
+function VariantB({ events, filtered, me, group, onOpen, onRsvp, toPlay = true }) {
   return (
     <>
-      {toPlay && <ToPlay events={events} me={me} onOpen={onOpen} />}
+      {toPlay && <ToPlay events={events} me={me} onOpen={onOpen} onRsvp={onRsvp} />}
       <Agenda events={filtered} me={me} group={group} onOpen={onOpen} />
     </>
   );
@@ -199,7 +222,7 @@ function VariantE(props) {
   const [tab, setTab] = useState("list");
   return (
     <>
-      <ToPlay events={props.events} me={props.me} onOpen={props.onOpen} />
+      <ToPlay events={props.events} me={props.me} onOpen={props.onOpen} onRsvp={props.onRsvp} />
       <div className="seg px-tabs">
         <button className={tab === "list" ? "on" : ""} onClick={() => setTab("list")}>Liste</button>
         <button className={tab === "cal" ? "on" : ""} onClick={() => setTab("cal")}>Calendrier</button>
@@ -230,7 +253,7 @@ function lanesFor(events, weekStart) {
   return lanes;
 }
 
-function VariantC({ events, me, group, onOpen, toPlay = true }) {
+function VariantC({ events, me, group, onOpen, onRsvp, toPlay = true }) {
   const [mine, setMine] = useState(false);
   const [month, setMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [day, setDay] = useState(todayIso());
@@ -250,7 +273,7 @@ function VariantC({ events, me, group, onOpen, toPlay = true }) {
 
   return (
     <>
-      {toPlay && <ToPlay events={events} me={me} onOpen={onOpen} />}
+      {toPlay && <ToPlay events={events} me={me} onOpen={onOpen} onRsvp={onRsvp} />}
       <section className="px-cal">
         <div className="px-cal-head">
           <button aria-label="Mois précédent" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}><ChevronLeft size={18} /></button>
@@ -312,7 +335,7 @@ function VariantC({ events, me, group, onOpen, toPlay = true }) {
 }
 
 // ---------- D : bandeau + agenda ----------
-function VariantD({ events, filtered, me, group, onOpen }) {
+function VariantD({ events, filtered, me, group, onOpen, onRsvp }) {
   const start = mondayOf(new Date());
   const days = Array.from({ length: 35 }, (_, i) => addDays(start, i));
   const [sel, setSel] = useState("");
@@ -332,7 +355,7 @@ function VariantD({ events, filtered, me, group, onOpen }) {
 
   return (
     <>
-      <ToPlay events={events} me={me} onOpen={onOpen} />
+      <ToPlay events={events} me={me} onOpen={onOpen} onRsvp={onRsvp} />
       <div className="px-strip" ref={strip}>
         {days.map((d, i) => {
           const s = isoOf(d);
@@ -412,7 +435,13 @@ const CSS = `
 .px-play h2{display:flex;align-items:center;gap:8px;font-family:'Bricolage Grotesque',system-ui;font-size:16px;font-weight:800;margin:0 0 6px 2px;}
 .px-play h2 span{background:var(--accent);color:#fff;border-radius:10px;font-size:12px;padding:2px 8px;}
 .px-play-row{display:flex;align-items:center;gap:10px;width:100%;padding:9px 2px;border:0;border-top:1px solid var(--line);background:none;text-align:left;color:var(--ink);}
-.px-play-row:first-of-type{border-top:0;}
+.px-play-item{border-top:1px solid var(--line);}
+.px-play-item:first-of-type{border-top:0;}
+.px-play-item .px-play-row{border-top:0;}
+.px-quick{display:flex;gap:6px;padding:0 0 10px 40px;}
+.px-quick button{flex:1;display:flex;align-items:center;justify-content:center;gap:5px;min-height:36px;padding:0 6px;border-radius:11px;
+  border:1.5px solid var(--a);background:var(--s);color:var(--a);font-weight:700;font-size:12.5px;}
+.px-quick button:active{background:var(--a);color:#fff;}
 .px-play-ic{display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:10px;background:var(--accent-soft);color:var(--accent);flex-shrink:0;}
 .px-play-txt{flex:1;min-width:0;display:flex;flex-direction:column;}
 .px-play-txt b{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}

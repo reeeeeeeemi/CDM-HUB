@@ -797,7 +797,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
                   </div>
                 )}
                 {variant === "A" ? <EventsView data={filtered} me={me} onOpen={openEvent} scale={scale} />
-                  : <HubPrototype variant={variant} events={events} me={me} group={group} onOpen={openEvent}
+                  : <HubPrototype variant={variant} events={events} me={me} group={group} onOpen={openEvent} onRsvp={actions.rsvp}
                       filtered={events.filter((e) => cityBig === "all" || e.city === cityBig)} />}
           </main>
           <button className="fab" onClick={() => setModal("event")}>
