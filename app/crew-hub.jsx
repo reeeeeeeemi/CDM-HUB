@@ -382,7 +382,8 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
   const [news, setNews] = useState(false);
 
   // PROTOTYPE — ?variant=B|C|D remplace la liste par un accueil alternatif.
-  const [variant, setVariant] = useState("A");
+  // E par défaut : c'est la piste retenue. A reste là pour comparer.
+  const [variant, setVariant] = useState("E");
   useEffect(() => {
     if (!prototypeOn) return;
     const v = new URLSearchParams(window.location.search).get("variant");
