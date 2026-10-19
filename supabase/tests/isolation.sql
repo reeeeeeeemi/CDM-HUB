@@ -4,7 +4,8 @@
 --  Crée deux groupes et cinq comptes, joue chaque rôle tour à
 --  tour, et vérifie qu'aucun groupe ne voit ni ne touche ce qui
 --  appartient à l'autre. S'arrête à la première fuite, avec un
---  message qui la nomme.
+--  message qui la nomme. Sinon, il finit sur une seule ligne :
+--  « Étanchéité : tout est OK ».
 --
 --  Tout se passe dans une transaction annulée à la fin : on
 --  peut le lancer sur la pré-prod comme sur la prod, il ne
@@ -383,6 +384,8 @@ begin
   end if;
 end $$;
 
-do $$ begin raise notice 'Étanchéité : tout est OK'; end $$;
+-- Le SQL Editor n'affiche que le dernier tableau, pas les NOTICE : on
+-- finit donc par une ligne lisible. Une fuite, elle, arrête tout avant.
+select 'Étanchéité : tout est OK' as resultat;
 
 rollback;
