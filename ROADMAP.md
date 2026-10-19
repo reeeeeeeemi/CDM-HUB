@@ -145,8 +145,9 @@ Décidé le 20 octobre 2026, à faire **après l'accueil** (F).
   sans recharger
 - **Une bulle flottante** en bas à droite de la fiche, qui ouvre le chat
   par-dessus ; le champ de saisie collé en bas, comme une messagerie
-- **Non lus** : un chiffre sur la bulle, et 💬 sur la ligne de l'event dans
-  l'agenda. Demande de retenir, par personne et par event, le dernier message
+- **Non lus** : 💬 et le nombre sur la ligne de l'event dans l'agenda. Sur la
+  fiche, la bulle ne porte qu'un **petit point** discret, et **rebondit** une
+  fois quand un message arrive pendant qu'on la lit. Demande de retenir, par personne et par event, le dernier message
   lu
 - **Tout le groupe écrit**, même sans avoir répondu : on peut demander l'heure
   avant de se décider
