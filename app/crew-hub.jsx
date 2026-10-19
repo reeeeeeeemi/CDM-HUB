@@ -1029,7 +1029,7 @@ function EventDetail({ ev, me, members, actions, onBack, onEdit, places, savedPl
 
   // PROTOTYPE — en-tête compact : la couleur en accent, plus en aplat.
   const head = compact ? (
-    <div className="dh">
+    <div className="dh" style={{ "--c": cat.color }}>
       <div className="dh-top">
         <button className="dh-ic" onClick={onBack} aria-label="Retour"><ChevronLeft size={19} /></button>
         <div className="dh-acts">
@@ -1044,16 +1044,16 @@ function EventDetail({ ev, me, members, actions, onBack, onEdit, places, savedPl
         </div>
       )}
       <div className="dh-main">
-        <span className="dh-emoji" style={{ background: cat.color + "1A" }}>{cat.emoji}</span>
+        <span className="dh-emoji">{cat.emoji}</span>
         <h1 className="dh-title">{ev.title}</h1>
       </div>
       <div className="dh-meta">
         <span style={{ color: cat.color, fontWeight: 700 }}>{cat.label}</span>
         {isBig && <span><Sparkles size={12} /> Big event</span>}
         {ev.city && <span>{cities.emoji(ev.city)} {ev.city}</span>}
-        {ev.date ? (cd && !cd.past && <span className="dh-cd" style={{ color: cat.color, background: cat.color + "14" }}>{cd.text}</span>)
-          : <span className="dh-cd" style={{ color: cat.color, background: cat.color + "14" }}><CalendarClock size={12} /> Date à voter</span>}
-        {!ev.place && modOn(ev, "placePoll") && <span className="dh-cd" style={{ color: cat.color, background: cat.color + "14" }}><MapPinned size={12} /> Lieu à voter</span>}
+        {ev.date ? (cd && !cd.past && <span className="dh-cd">{cd.text}</span>)
+          : <span className="dh-cd"><CalendarClock size={12} /> Date à voter</span>}
+        {!ev.place && modOn(ev, "placePoll") && <span className="dh-cd"><MapPinned size={12} /> Lieu à voter</span>}
       </div>
     </div>
   ) : null;
@@ -2068,18 +2068,23 @@ a{text-decoration:none;color:inherit;}
 /* La fiche vit désormais sous le header : elle ne doit plus réclamer
    toute la hauteur de l'écran, sinon la page dépasse d'autant. */
 .detail{min-height:auto;}
-.dh{padding:10px 18px 4px;}
+/* Une teinte de la catégorie, plus franche en haut, qui se fond dans la page :
+   on reconnaît le plan d'un coup d'œil sans l'aplat d'autrefois. */
+.dh{padding:10px 18px 18px;border-radius:0 0 24px 24px;
+  background:linear-gradient(180deg, color-mix(in srgb, var(--c) 26%, var(--bg)) 0%, color-mix(in srgb, var(--c) 9%, var(--bg)) 100%);}
 .dh-top{display:flex;align-items:center;justify-content:space-between;}
 .dh-acts{display:flex;gap:6px;}
 .dh-ic{display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);}
 .dh-ic.on{background:var(--ink);color:#fff;border-color:var(--ink);}
 .dh-cal{display:flex;justify-content:flex-end;gap:8px;margin-top:8px;}
 .dh-main{display:flex;align-items:center;gap:12px;margin-top:14px;}
-.dh-emoji{flex-shrink:0;display:flex;align-items:center;justify-content:center;width:46px;height:46px;border-radius:14px;font-size:24px;}
+.dh-emoji{flex-shrink:0;display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:15px;font-size:25px;
+  background:var(--c);box-shadow:0 6px 16px color-mix(in srgb, var(--c) 35%, transparent);}
 .dh-title{font-family:'Bricolage Grotesque',system-ui;font-size:23px;font-weight:800;line-height:1.1;letter-spacing:-.4px;}
 .dh-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-top:10px;font-size:13px;color:var(--muted);}
 .dh-meta span{display:inline-flex;align-items:center;gap:4px;}
-.dh-cd{padding:3px 9px;border-radius:9px;font-weight:700;}
+.dh-cd{padding:3px 9px;border-radius:9px;font-weight:700;background:var(--c);color:#fff;}
+.dh-ic{border-color:color-mix(in srgb, var(--c) 25%, var(--line));}
 .detail-hero{padding:16px 18px 30px;color:#fff;border-radius:0 0 26px 26px;}
 .detail-emoji{font-size:44px;margin:16px 0 10px;}
 .detail-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
