@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import { isPseudoTaken } from "@/lib/group";
 
 /**
  * Ville dont on veut être prévenu quand un event y est publié.
@@ -89,8 +90,11 @@ export async function setNotifyCities(cities: string[]) {
   return {};
 }
 
-/** Changer son blaze. Il n'existait aucun moyen de corriger une faute. */
-export async function setPseudo(pseudo: string) {
+/**
+ * Changer son blaze dans un groupe. Chacun en a un par groupe ; le dernier
+ * choisi devient aussi celui que proposera le prochain groupe rejoint.
+ */
+export async function setPseudo(groupId: string, pseudo: string) {
   const name = pseudo.trim();
   if (name.length < 2) return { error: "Deux caractères minimum." };
   if (name.length > 40) return { error: "Quarante caractères maximum." };
@@ -103,9 +107,16 @@ export async function setPseudo(pseudo: string) {
 
   if (!user) return { error: "Session expirée." };
 
-  const { error } = await supabase.from("profiles").update({ pseudo: name }).eq("id", user.id);
+  const { error } = await supabase
+    .from("members")
+    .update({ pseudo: name })
+    .eq("group_id", groupId)
+    .eq("user_id", user.id);
 
+  if (isPseudoTaken(error)) return { error: "Ce pseudo est déjà pris dans le groupe." };
   if (error) return { error: error.message };
+
+  await supabase.from("profiles").update({ pseudo: name }).eq("id", user.id);
 
   revalidatePath("/");
   return {};

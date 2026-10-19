@@ -2,7 +2,11 @@ import webpush, { type PushSubscription as WebPushSubscription } from "web-push"
 
 import { createClient } from "@/lib/supabase/server";
 
-export type PushTarget = { endpoint: string; p256dh: string; auth: string };
+/**
+ * `prefix` : le nom du groupe, que la base ne remplit que pour qui est dans
+ * plusieurs groupes. Il ouvre alors le texte de la notification.
+ */
+export type PushTarget = { endpoint: string; p256dh: string; auth: string; prefix?: string };
 export type PushPayload = { title: string; body: string; url: string; tag: string };
 
 let configured = false;
@@ -42,7 +46,8 @@ export async function sendPush(targets: PushTarget[], payload: PushPayload) {
   if (targets.length === 0 || !ready()) return { sent: 0 };
 
   const supabase = await createClient();
-  const body = JSON.stringify(payload);
+  const bodyFor = (t: PushTarget) =>
+    JSON.stringify(t.prefix ? { ...payload, body: `${t.prefix} · ${payload.body}` } : payload);
 
   const results = await Promise.allSettled(
     targets.map(async (t) => {
@@ -51,7 +56,7 @@ export async function sendPush(targets: PushTarget[], payload: PushPayload) {
         keys: { p256dh: t.p256dh, auth: t.auth },
       };
       try {
-        await webpush.sendNotification(sub, body);
+        await webpush.sendNotification(sub, bodyFor(t));
         return true;
       } catch (e) {
         const status = (e as { statusCode?: number }).statusCode;

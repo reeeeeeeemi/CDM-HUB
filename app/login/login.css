@@ -188,3 +188,10 @@
 }
 
 .auth-link:hover { color: #93360f; }
+
+/* Rejoindre un groupe : ses chez-soi, cochés par défaut. */
+.auth-homes{border:0;padding:0;margin:4px 0 0;display:flex;flex-direction:column;gap:8px;}
+.auth-homes legend{font-weight:600;font-size:14px;margin-bottom:6px;padding:0;}
+.auth-homes label{display:flex;align-items:center;gap:10px;font-size:14px;cursor:pointer;}
+.auth-homes input{width:20px;height:20px;flex-shrink:0;}
+.auth-homes em{font-style:normal;opacity:.65;}

@@ -4,14 +4,18 @@ import { useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, Bell, Users, UserPen, Link2 } from "lucide-react";
 
-import { CITIES } from "@/lib/brand";
 import { usePush, PREFS } from "@/lib/use-push";
+import type { City } from "@/lib/group";
 
 type Member = { id: string; pseudo: string; city: string };
 type Prefs = Record<string, boolean>;
 
 type Props = {
   viewer: { id: string; email: string; pseudo: string };
+  group: { name: string; cities: City[] };
+  isAdmin: boolean;
+  muted: boolean;
+  onSetMuted: (muted: boolean) => Promise<{ error?: string }>;
   members: Member[];
   cities: string[];
   prefs: Prefs;
@@ -24,7 +28,7 @@ type Props = {
 };
 
 export default function Settings({
-  viewer, members, cities, prefs, birthday,
+  viewer, group, isAdmin, muted, onSetMuted, members, cities, prefs, birthday,
   onSetCities, onSetPrefs, onSetPseudo, onSetBirthday, onInvite,
 }: Props) {
   const push = usePush();
@@ -38,6 +42,7 @@ export default function Settings({
   const [saved, setSaved] = useState("");
   const [err, setErr] = useState("");
   const [invite, setInvite] = useState("");
+  const [quiet, setQuiet] = useState(muted);
 
   const flash = (msg: string) => {
     setSaved(msg);
@@ -55,6 +60,12 @@ export default function Settings({
     setFlags(next);
     // Un seul interrupteur part : deux onglets ouverts ne s'écrasent pas.
     onSetPrefs({ [k]: next[k] }).then((r) => (r?.error ? setErr(r.error) : flash("Enregistré")));
+  };
+
+  const flipQuiet = () => {
+    const next = !quiet;
+    setQuiet(next);
+    onSetMuted(next).then((r) => (r?.error ? setErr(r.error) : flash(next ? `${group.name} coupé` : `${group.name} réactivé`)));
   };
 
   const saveName = async () => {
@@ -107,7 +118,7 @@ export default function Settings({
         <h2><UserPen size={16} /> Mon compte</h2>
         {/* Pas un <label> : il renverrait le clic du bouton OK vers le champ. */}
         <div className="rg-field">
-          <span>Ton blaze</span>
+          <span>Ton blaze dans {group.name}</span>
           <div className="rg-inline">
             <input value={name} onChange={(e) => setName(e.target.value)} maxLength={40} aria-label="Ton blaze" />
             <button className="rg-btn sm" onClick={saveName} disabled={!name.trim() || name === viewer.pseudo}>
@@ -126,7 +137,10 @@ export default function Settings({
       </section>
 
       <section className="rg-sec">
-        <h2><Users size={16} /> Le groupe · {members.length}</h2>
+        <div className="rg-sec-head">
+          <h2><Users size={16} /> {group.name} · {members.length}</h2>
+          <Link className="rg-link" href="/groupe">{isAdmin ? "Gérer" : "Voir"} →</Link>
+        </div>
         <div className="rg-people">
           {members.map((m) => (
             <span className="rg-person" key={m.id}>
@@ -139,7 +153,7 @@ export default function Settings({
         <h3><Link2 size={14} /> Inviter un ami</h3>
         {invite ? (
           <>
-            <p className="rg-hint">Valable 7 jours. Qui l&apos;ouvre rejoint le hub.</p>
+            <p className="rg-hint">Valable 7 jours. Qui l&apos;ouvre rejoint {group.name}.</p>
             <button className="rg-btn" onClick={copy}>Copier le lien</button>
           </>
         ) : (
@@ -176,6 +190,16 @@ export default function Settings({
 
         {push.state === "on" && (
           <>
+            {/* Au-dessus des autres : couper le groupe les rend sans objet. */}
+            <div className="rg-list">
+              <button type="button" role="switch" aria-checked={!quiet}
+                className={"rg-row" + (!quiet ? " on" : "")} onClick={flipQuiet}>
+                <span>Tout ce qui vient de {group.name}</span>
+                <span className={"rg-switch" + (!quiet ? " on" : "")} aria-hidden />
+              </button>
+            </div>
+
+            {!quiet && <>
             <div className="rg-list">
               {PREFS.map(([k, label]: string[]) => (
                 <button key={k} type="button" role="switch" aria-checked={Boolean(flags[k])}
@@ -186,16 +210,21 @@ export default function Settings({
               ))}
             </div>
 
-            <h3>Plans du quotidien dans</h3>
-            <div className="rg-chips">
-              {Object.keys(CITIES).map((c) => (
-                <button key={c} type="button" aria-pressed={picked.includes(c)}
-                  className={"rg-chip" + (picked.includes(c) ? " on" : "")}
-                  onClick={() => toggleCity(c)}>
-                  {CITIES[c]} {c}
-                </button>
-              ))}
-            </div>
+            {group.cities.length > 0 && (
+              <>
+                <h3>Plans du quotidien dans</h3>
+                <div className="rg-chips">
+                  {group.cities.map((c) => (
+                    <button key={c.name} type="button" aria-pressed={picked.includes(c.name)}
+                      className={"rg-chip" + (picked.includes(c.name) ? " on" : "")}
+                      onClick={() => toggleCity(c.name)}>
+                      {c.emoji} {c.name}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+            </>}
           </>
         )}
       </section>

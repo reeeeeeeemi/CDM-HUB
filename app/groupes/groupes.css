@@ -1,0 +1,46 @@
+/* Nouveau groupe — s'appuie sur les variables et les champs de reglages.css. */
+
+/* L'emoji tient dans une case carrée, à gauche du champ qu'il illustre. */
+.ng-name{display:flex;gap:8px;align-items:flex-end;}
+.ng-name>.rg-field:last-child{flex:1;min-width:0;}
+.ng-emoji{width:64px;flex-shrink:0;}
+.ng-emoji input{text-align:center;}
+.ng-opt{font-style:normal;font-weight:500;font-size:13px;color:var(--muted);font-family:Inter,system-ui,sans-serif;}
+
+/* Recherche de ville : un champ, sa liste dessous, les villes en pastilles. */
+.cs-chips{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px;}
+.cs-chip{display:inline-flex;align-items:center;gap:4px;padding:4px 8px 4px 4px;border-radius:20px;background:var(--ink);color:#fff;font-weight:600;font-size:13px;}
+/* L'emoji se retouche sur place : un champ qui n'en a pas l'air. */
+.cs-emoji{width:30px;height:28px;padding:0;border:0;border-radius:14px;background:rgba(255,255,255,.14);text-align:center;font-size:15px;color:#fff;outline:none;}
+.cs-emoji:focus{background:rgba(255,255,255,.3);}
+.cs-chip button{display:flex;border:0;background:none;color:inherit;padding:0 0 0 2px;opacity:.8;}
+.cs-box{position:relative;display:flex;align-items:center;gap:8px;padding:0 14px;border:2px solid var(--line);border-radius:12px;background:var(--card);}
+.cs-box:focus-within{border-color:var(--accent);}
+.cs-ic{color:var(--muted);flex-shrink:0;}
+.cs-box input{flex:1;min-width:0;padding:12px 0;border:0;outline:none;background:none;font-size:16px;font-family:inherit;color:var(--ink);}
+.cs-list{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:20;background:var(--card);border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 12px 30px rgba(0,0,0,.12);padding:6px;max-height:300px;overflow-y:auto;}
+.cs-item{display:flex;align-items:center;gap:10px;width:100%;padding:9px 10px;border:0;border-radius:10px;background:none;text-align:left;font-family:inherit;font-size:14px;color:var(--ink);}
+.cs-item:hover{background:var(--bg);}
+.cs-item span{display:flex;flex-direction:column;}
+.cs-item em{font-style:normal;font-size:12px;color:var(--muted);}
+.cs-item.free{color:var(--accent);font-weight:600;}
+.cs-flag{font-size:20px;width:26px;text-align:center;}
+.cs-hint{color:var(--muted);font-size:13px;padding:8px 10px;}
+
+.ng-count{font-weight:700;color:var(--accent);}
+.ng-count.ok{color:#0F766E;}
+
+.ng-family{margin-top:14px;}
+.ng-family h3{font-size:12.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:0 0 7px;}
+/* La couleur de la catégorie, dès qu'on la choisit : on voit déjà le hub. */
+.ng-cat{padding:8px 13px;border-radius:20px;border:2px solid color-mix(in srgb, var(--c) 30%, transparent);background:var(--card);
+  color:var(--c);font-weight:600;font-size:13px;transition:.12s;}
+.ng-cat.on{background:var(--c);border-color:var(--c);color:#fff;}
+.ng-cat:disabled{opacity:.35;}
+
+/* Le bouton reste en bas de l'écran : la liste des catégories est longue. */
+.ng-foot{position:sticky;bottom:0;padding:10px 0 calc(6px + env(safe-area-inset-bottom));
+  background:linear-gradient(to top, var(--bg) 70%, transparent);}
+.ng-submit{width:100%;min-height:52px;border:0;border-radius:14px;background:var(--accent);color:#fff;font-weight:700;font-size:15.5px;}
+.ng-submit:disabled{background:var(--line);color:var(--muted);}

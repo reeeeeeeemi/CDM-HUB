@@ -1,0 +1,103 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import Link from "next/link";
+import { ChevronLeft, Users, MapPin, Shapes } from "lucide-react";
+
+import { MIN_CATEGORIES } from "@/lib/catalog";
+import type { City } from "@/lib/group";
+import type { NewGroup } from "@/lib/actions/group";
+
+import CitySearch from "../city-search";
+import CategoryPicker from "../category-picker";
+
+type Props = {
+  /** Le dernier pseudo utilisé, proposé d'office. */
+  pseudo: string;
+  /** Sans groupe, il n'y a pas d'accueil où revenir. */
+  canGoBack: boolean;
+  onCreate: (g: NewGroup) => Promise<{ error?: string }>;
+};
+
+/**
+ * Le groupe en trois temps, sur une seule page : qui on est, où l'on vit,
+ * ce qu'on fait ensemble. Les catégories viennent en dernier — c'est le
+ * seul choix qui demande de parcourir une liste.
+ */
+export default function NewGroupForm({ pseudo, canGoBack, onCreate }: Props) {
+  const [name, setName] = useState("");
+  const [emoji, setEmoji] = useState("");
+  const [nick, setNick] = useState(pseudo);
+  const [tagline, setTagline] = useState("");
+  const [cities, setCities] = useState<City[]>([]);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [err, setErr] = useState("");
+  const [pending, start] = useTransition();
+
+  // Le bouton dit ce qui manque, plutôt que de rester grisé sans raison.
+  const missing = !name.trim()
+    ? "Donne un nom au groupe"
+    : nick.trim().length < 2
+      ? "Choisis ton pseudo"
+      : picked.length < MIN_CATEGORIES
+        ? `Choisis encore ${MIN_CATEGORIES - picked.length} catégorie${MIN_CATEGORIES - picked.length > 1 ? "s" : ""}`
+        : "";
+
+  const submit = () =>
+    start(async () => {
+      setErr("");
+      // En cas de succès, l'action redirige vers le nouveau groupe.
+      const r = await onCreate({ name, emoji, tagline, pseudo: nick, cities, categories: picked });
+      if (r?.error) setErr(r.error);
+    });
+
+  return (
+    <div className="rg">
+      <header className="rg-head">
+        {canGoBack && (
+          <Link className="rg-back" href="/" aria-label="Revenir au hub">
+            <ChevronLeft size={19} strokeWidth={2.4} />
+          </Link>
+        )}
+        <h1>Nouveau groupe</h1>
+      </header>
+
+      {err && <p className="rg-err" role="alert">{err}</p>}
+
+      <section className="rg-sec">
+        <h2><Users size={16} /> Le groupe</h2>
+        <div className="ng-name">
+          <label className="rg-field ng-emoji"><span>Emoji</span>
+            <input value={emoji} onChange={(e) => setEmoji(e.target.value)} placeholder="🎉" maxLength={8} aria-label="Emoji du groupe (facultatif)" />
+          </label>
+          <label className="rg-field"><span>Nom</span>
+            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={40} placeholder="Ex. Les Bouyaves" autoFocus />
+          </label>
+        </div>
+        <label className="rg-field"><span>Ton pseudo dans ce groupe</span>
+          <input value={nick} onChange={(e) => setNick(e.target.value)} maxLength={40} autoComplete="nickname" />
+        </label>
+        <label className="rg-field"><span>Phrase d&apos;accueil <em>· facultatif</em></span>
+          <input value={tagline} onChange={(e) => setTagline(e.target.value)} maxLength={280} placeholder="Ce qui réunit la bande, en une phrase" />
+        </label>
+      </section>
+
+      <section className="rg-sec">
+        <h2><MapPin size={16} /> Vos villes <em className="ng-opt">· facultatif</em></h2>
+        <p className="rg-hint">Elles servent à filtrer les plans du quotidien. Sans ville, tout s&apos;affiche ensemble.</p>
+        <CitySearch cities={cities} onChange={setCities} />
+      </section>
+
+      <section className="rg-sec">
+        <h2><Shapes size={16} /> Ce que vous faites ensemble</h2>
+        <CategoryPicker picked={picked} onChange={setPicked} />
+      </section>
+
+      <div className="ng-foot">
+        <button className="ng-submit" disabled={Boolean(missing) || pending} onClick={submit}>
+          {pending ? "Création…" : missing || "Créer le groupe"}
+        </button>
+      </div>
+    </div>
+  );
+}

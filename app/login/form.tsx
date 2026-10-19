@@ -4,7 +4,7 @@ import { useActionState, useEffect, useState } from "react";
 import { KeyRound, PartyPopper, Send } from "lucide-react";
 
 import { requestReset, signIn, signUp, type AuthState } from "./actions";
-import { APP_NAME, GROUP, TAGLINE } from "@/lib/brand";
+import { APP_NAME, TAGLINE } from "@/lib/brand";
 import { createClient } from "@/lib/supabase/client";
 import "./login.css";
 
@@ -78,7 +78,6 @@ export function LoginForm({ next = "" }: { next?: string }) {
         {isForgot ? <KeyRound size={30} /> : <PartyPopper size={30} />}
       </div>
 
-      <p className="auth-kicker">{GROUP}</p>
 
       {isForgot ? (
         <>

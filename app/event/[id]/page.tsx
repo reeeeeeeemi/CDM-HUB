@@ -1,15 +1,21 @@
 import Link from "next/link";
 
 import { createClient } from "@/lib/supabase/server";
-import { APP_NAME, GROUP } from "@/lib/brand";
+import { APP_NAME } from "@/lib/brand";
 
 import { Hub, readViewer } from "../../hub";
 import "../../login/login.css";
 
-type Preview = { title: string; starts_on: string | null; ends_on: string | null };
+type Preview = {
+  title: string;
+  starts_on: string | null;
+  ends_on: string | null;
+  group_id: string;
+  group_name: string;
+};
 
 /**
- * Titre et dates, lisibles sans compte.
+ * Titre, dates et nom du groupe, lisibles sans compte.
  *
  * Passe par event_preview, une fonction security definer volontairement
  * étroite : WhatsApp charge le lien depuis ses serveurs, sans cookie, et les
@@ -51,19 +57,19 @@ export async function generateMetadata({ params }: PageProps<"/event/[id]">) {
 
 export default async function EventPage({ params }: PageProps<"/event/[id]">) {
   const { id } = await params;
-  const viewer = await readViewer();
+  const p = await preview(id);
+  // L'event ouvre son propre groupe, quel que soit le dernier ouvert.
+  const viewer = await readViewer(p?.group_id);
 
-  if (viewer?.isMember) return <Hub viewer={viewer} initialEvent={id} />;
+  if (viewer?.group && viewer.group.id === p?.group_id) return <Hub viewer={viewer} initialEvent={id} />;
 
   // Lien transféré hors du groupe : on montre ce que l'aperçu montrait déjà,
   // et rien de plus. Pas l'écran de connexion brut — il ne dirait pas
   // pourquoi ça ne marche pas.
-  const p = await preview(id);
-
   return (
     <div className="auth">
       <div className="auth-badge" aria-hidden="true">🔒</div>
-      <p className="auth-kicker">{GROUP}</p>
+      <p className="auth-kicker">{p?.group_name ?? APP_NAME}</p>
       <h1 className="auth-title">{p ? p.title : "Plan privé"}</h1>
       <p className="auth-sub">
         {p ? `${whenLabel(p)}. ` : ""}
@@ -72,7 +78,8 @@ export default async function EventPage({ params }: PageProps<"/event/[id]">) {
       </p>
       {viewer ? (
         <p className="auth-msg ok">
-          Tu es connecté avec {viewer.email}, mais ce compte ne fait pas encore partie du groupe.
+          Tu es connecté avec {viewer.email}, mais ce compte ne fait pas partie de{" "}
+          {p?.group_name ?? "ce groupe"}.
         </p>
       ) : (
         <Link className="auth-submit" href={`/login?next=${encodeURIComponent(`/event/${id}`)}`}>
