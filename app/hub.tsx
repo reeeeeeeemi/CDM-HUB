@@ -107,7 +107,7 @@ export async function readViewer(prefer?: string): Promise<Viewer | null> {
  * L'app elle-même. `initialEvent` ouvre directement une fiche : c'est ce qui
  * arrive quand on suit un lien partagé ou qu'on touche une notification.
  */
-export function Hub({ viewer, initialEvent }: { viewer: Viewer; initialEvent?: string }) {
+export function Hub({ viewer, initialEvent, openChat = false }: { viewer: Viewer; initialEvent?: string; openChat?: boolean }) {
   // `me` est l'identifiant : c'est lui qui sert aux comparaisons et qui part
   // en base. Le pseudo ne sert qu'à l'affichage.
   return (
@@ -118,6 +118,7 @@ export function Hub({ viewer, initialEvent }: { viewer: Viewer; initialEvent?: s
       notifyCity={viewer.city}
       onSetCity={setNotifyCity}
       initialEvent={initialEvent}
+      openChat={openChat}
       group={viewer.group!}
       groups={viewer.groups}
       remember={viewer.remember}

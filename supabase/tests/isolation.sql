@@ -48,8 +48,12 @@ insert into public.event_rsvps (event_id, user_id, status) values
   ('aaaaaaaa-0000-0000-0000-0000000000e1', 'aaaaaaaa-0000-0000-0000-0000000000a2', 'in'),
   ('aaaaaaaa-0000-0000-0000-0000000000e2', 'aaaaaaaa-0000-0000-0000-0000000000b1', 'in');
 
-insert into public.event_comments (event_id, author_id, body) values
-  ('aaaaaaaa-0000-0000-0000-0000000000e1', 'aaaaaaaa-0000-0000-0000-0000000000a1', 'secret de A');
+insert into public.event_comments (id, event_id, author_id, body) values
+  ('aaaaaaaa-0000-0000-0000-00000000cc01', 'aaaaaaaa-0000-0000-0000-0000000000e1', 'aaaaaaaa-0000-0000-0000-0000000000a1', 'secret de A');
+
+-- Un appareil pour A-un : sans lui, une notification de chat ne se voit pas.
+insert into public.push_subscriptions (endpoint, user_id, p256dh, auth) values
+  ('test://a1', 'aaaaaaaa-0000-0000-0000-0000000000a1', 'x', 'x');
 
 insert into public.date_options (id, event_id, on_date, added_by) values
   ('aaaaaaaa-0000-0000-0000-0000000000d1', 'aaaaaaaa-0000-0000-0000-0000000000e1', current_date + 20, 'aaaaaaaa-0000-0000-0000-0000000000a1');
@@ -186,6 +190,81 @@ begin
   end if;
 end $$;
 
+reset role;
+
+
+-- ------------------------------------------------------------
+--  Le chat : réactions, lectures, notifications
+-- ------------------------------------------------------------
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"aaaaaaaa-0000-0000-0000-0000000000b1","role":"authenticated"}', true);
+
+do $$
+begin
+  begin
+    insert into public.comment_reactions (comment_id, event_id, user_id, emoji)
+    values ('aaaaaaaa-0000-0000-0000-00000000cc01', 'aaaaaaaa-0000-0000-0000-0000000000e1', 'aaaaaaaa-0000-0000-0000-0000000000b1', '👍');
+    raise exception 'FUITE : B-un réagit à un message de A';
+  exception when insufficient_privilege then null;
+  end;
+  -- En mentant sur l'event : la réaction viserait A depuis un event de B.
+  begin
+    insert into public.comment_reactions (comment_id, event_id, user_id, emoji)
+    values ('aaaaaaaa-0000-0000-0000-00000000cc01', 'aaaaaaaa-0000-0000-0000-0000000000e2', 'aaaaaaaa-0000-0000-0000-0000000000b1', '👍');
+    raise exception 'FUITE : B-un réagit à A en se faisant passer pour son event';
+  exception when insufficient_privilege then null;
+  end;
+  -- Répondre depuis B à un message de A.
+  begin
+    insert into public.event_comments (event_id, author_id, body, reply_to)
+    values ('aaaaaaaa-0000-0000-0000-0000000000e2', 'aaaaaaaa-0000-0000-0000-0000000000b1', 'je cite A', 'aaaaaaaa-0000-0000-0000-00000000cc01');
+    raise exception 'FUITE : B-un cite un message de A';
+  exception when others then
+    if sqlerrm like 'FUITE%' then raise; end if;
+  end;
+  if exists (select 1 from public.chat_unread('aaaaaaaa-0000-0000-0000-00000000000a')) then raise exception 'FUITE : non-lus de A'; end if;
+  if exists (select 1 from public.chat_targets('aaaaaaaa-0000-0000-0000-0000000000e1')) then raise exception 'FUITE : destinataires du chat de A'; end if;
+  perform public.mark_chat_read('aaaaaaaa-0000-0000-0000-0000000000e1');
+  if exists (select 1 from public.chat_reads) then raise exception 'FUITE : B-un marque lu un chat de A'; end if;
+end $$;
+
+reset role;
+
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"aaaaaaaa-0000-0000-0000-0000000000a2","role":"authenticated"}', true);
+
+do $$
+declare n int;
+begin
+  insert into public.comment_reactions (comment_id, event_id, user_id, emoji)
+  values ('aaaaaaaa-0000-0000-0000-00000000cc01', 'aaaaaaaa-0000-0000-0000-0000000000e1', 'aaaaaaaa-0000-0000-0000-0000000000a2', '🔥');
+  if (select count(*) from public.comment_reactions) <> 1 then raise exception 'A-deux ne voit pas sa réaction'; end if;
+  if (select unread from public.chat_unread('aaaaaaaa-0000-0000-0000-00000000000a')) <> 1 then raise exception 'le message de A-un n''est pas compté non lu'; end if;
+  perform public.mark_chat_read('aaaaaaaa-0000-0000-0000-0000000000e1');
+  if exists (select 1 from public.chat_unread('aaaaaaaa-0000-0000-0000-00000000000a')) then raise exception 'lu, le message compte encore'; end if;
+  -- A-un, chaud et créateur, est prévenu une fois…
+  select count(*) into n from public.chat_targets('aaaaaaaa-0000-0000-0000-0000000000e1');
+  if n <> 1 then raise exception 'A-un aurait dû être prévenu (% appareil)', n; end if;
+  -- …et pas une deuxième tant qu'il n'a pas relu.
+  select count(*) into n from public.chat_targets('aaaaaaaa-0000-0000-0000-0000000000e1');
+  if n <> 0 then raise exception 'A-un prévenu deux fois sans avoir relu'; end if;
+end $$;
+
+reset role;
+
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"aaaaaaaa-0000-0000-0000-0000000000a1","role":"authenticated"}', true);
+do $$ begin perform public.mark_chat_read('aaaaaaaa-0000-0000-0000-0000000000e1'); end $$;
+reset role;
+
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"aaaaaaaa-0000-0000-0000-0000000000a2","role":"authenticated"}', true);
+do $$
+begin
+  if (select count(*) from public.chat_targets('aaaaaaaa-0000-0000-0000-0000000000e1')) <> 1 then
+    raise exception 'A-un a relu : il doit être prévenu de nouveau';
+  end if;
+end $$;
 reset role;
 
 

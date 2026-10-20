@@ -55,13 +55,15 @@ export async function generateMetadata({ params }: PageProps<"/event/[id]">) {
   };
 }
 
-export default async function EventPage({ params }: PageProps<"/event/[id]">) {
+export default async function EventPage({ params, searchParams }: PageProps<"/event/[id]">) {
   const { id } = await params;
+  // ?chat=1 : on arrive d'une notification du chat, qui s'ouvre d'office.
+  const { chat } = await searchParams;
   const p = await preview(id);
   // L'event ouvre son propre groupe, quel que soit le dernier ouvert.
   const viewer = await readViewer(p?.group_id);
 
-  if (viewer?.group && viewer.group.id === p?.group_id) return <Hub viewer={viewer} initialEvent={id} />;
+  if (viewer?.group && viewer.group.id === p?.group_id) return <Hub viewer={viewer} initialEvent={id} openChat={chat === "1"} />;
 
   // Lien transféré hors du groupe : on montre ce que l'aperçu montrait déjà,
   // et rien de plus. Pas l'écran de connexion brut — il ne dirait pas

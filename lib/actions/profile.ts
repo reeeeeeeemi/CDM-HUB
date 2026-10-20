@@ -39,6 +39,7 @@ export async function setNotifyPrefs(prefs: {
   nudge?: boolean;
   birthday?: boolean;
   digest?: boolean;
+  chat?: boolean;
 }) {
   const supabase = await createClient();
 
@@ -58,6 +59,7 @@ export async function setNotifyPrefs(prefs: {
   if (prefs.nudge !== undefined) patch.notify_nudge = prefs.nudge;
   if (prefs.birthday !== undefined) patch.notify_birthday = prefs.birthday;
   if (prefs.digest !== undefined) patch.notify_digest = prefs.digest;
+  if (prefs.chat !== undefined) patch.notify_chat = prefs.chat;
   if (Object.keys(patch).length === 0) return {};
 
   const { error } = await supabase.from("profiles").update(patch).eq("id", user.id);

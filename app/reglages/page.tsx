@@ -36,7 +36,7 @@ export default async function Page() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("notify_cities, notify_joined, notify_nudge, notify_birthday, notify_digest, birthday")
+    .select("notify_cities, notify_joined, notify_nudge, notify_birthday, notify_digest, notify_chat, birthday")
     .eq("id", viewer.id)
     .single();
 
@@ -55,6 +55,7 @@ export default async function Page() {
         nudge: profile?.notify_nudge ?? true,
         birthday: profile?.notify_birthday ?? true,
         digest: profile?.notify_digest ?? true,
+        chat: profile?.notify_chat ?? true,
       }}
       onSetCities={setNotifyCities}
       onSetPrefs={setNotifyPrefs}

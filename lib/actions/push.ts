@@ -109,6 +109,24 @@ export async function nudgeEvent(eventId: string, title: string, what: string) {
   });
 }
 
+/**
+ * Un message dans le chat d'un event. Qui est prévenu, et une seule fois
+ * tant qu'il n'a pas relu, se décide en base (chat_targets). Toucher la
+ * notification ouvre le chat.
+ */
+export async function notifyChat(eventId: string, title: string, what: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("chat_targets", { event_id: eventId });
+  if (error || !data) return { sent: 0 };
+
+  return sendPush(data as PushTarget[], {
+    title: `💬 ${title}`,
+    body: what,
+    url: `/event/${eventId}?chat=1`,
+    tag: `chat:${eventId}`,
+  });
+}
+
 /** Notifie l'auteur d'un event qu'on a réagi dessus. */
 export async function notifyEventActivity(eventId: string, title: string, what: string) {
   const supabase = await createClient();

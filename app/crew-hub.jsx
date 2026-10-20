@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, createContext, useContext } from "react";
 import {
   Plus, Users, CalendarDays, MapPin, ChevronLeft, ChevronDown, Check, HelpCircle,
-  X, Trash2, Sparkles, Send, Wallet, MessageCircle, Link2,
-  ExternalLink, MessageSquare, ListTodo, CheckCircle2, Circle, CalendarClock, Lock,
+  X, Trash2, Sparkles, Wallet, MessageCircle, Link2,
+  ExternalLink, ListTodo, CheckCircle2, Circle, CalendarClock, Lock,
   Car, Plane, TrainFront, UserPlus, Navigation, AlertTriangle, CalendarPlus,
   House, Map as MapIcon, MapPinned, ShoppingCart, BedDouble, Share2, Settings2, Pencil, BellRing, KeyRound, Building, Cake, Wifi, Copy,
 } from "lucide-react";
@@ -25,7 +25,8 @@ import { APP_NAME } from "@/lib/brand";
 import { categoryOf, groupCategories, CATEGORIES } from "@/lib/catalog";
 import { cityEmoji as cityEmojiIn, groupBadge } from "@/lib/group";
 import { rememberGroup, openGroup } from "@/lib/actions/group";
-import { notifyNewEvent, notifyEventActivity, notifyAttendees, nudgeEvent } from "@/lib/actions/push";
+import { notifyNewEvent, notifyEventActivity, notifyAttendees, nudgeEvent, notifyChat } from "@/lib/actions/push";
+import Chat, { CHAT_CSS } from "./chat";
 
 // ---------- config ----------
 // Les catégories viennent du catalogue (lib/catalog.ts) ; chaque groupe en
@@ -78,7 +79,6 @@ const MODULE_LABELS = [
   ["placePoll", "Sondage de lieu"],
   ["todos", "To-Do"],
   ["courses", "Liste de courses"],
-  ["comments", "Commentaires"],
 ];
 
 // Ce que chaque section apportera à l'event — sert l'aperçu du formulaire.
@@ -89,7 +89,6 @@ const MODULE_META = {
   placePoll: { icon: MapPinned,     title: "Sondage de lieu",     hint: "Proposez des endroits avec leur lien Maps, chacun vote." },
   todos:     { icon: ListTodo,      title: "To-Do",               hint: "Ce qu'il y a à faire, chacun coche ce qu'il prend en charge." },
   courses:   { icon: ShoppingCart,  title: "Liste de courses",    hint: "Ce qu'il faut acheter, et qui le ramène." },
-  comments:  { icon: MessageSquare, title: "Commentaires",        hint: "Le fil de discussion de l'event." },
 };
 
 // Les identifiants sont générés ici pour que l'affichage optimiste et la
@@ -345,10 +344,10 @@ function PlaceInput({ value, onChange, places, placeholder, onEnter, saved = [],
  *
  * @param {{ me?: string | null, meName?: string, onSignOut?: (() => void | Promise<void>) | null,
  *          notifyCity?: string, onSetCity?: ((city: string) => void) | null,
- *          initialEvent?: string | null, group: import("@/lib/group").Group,
+ *          initialEvent?: string | null, openChat?: boolean, group: import("@/lib/group").Group,
  *          groups?: import("@/lib/group").GroupChip[], remember?: boolean }} props
  */
-export default function App({ me: meFromAuth = null, meName = "", onSignOut = null, notifyCity = "", onSetCity = null, initialEvent = null, group, groups = [], remember = false }) {
+export default function App({ me: meFromAuth = null, meName = "", onSignOut = null, notifyCity = "", onSetCity = null, initialEvent = null, openChat = false, group, groups = [], remember = false }) {
   const [me, setMe] = useState(meFromAuth);
   const cities = useMemo(() => ({
     list: group.cities.map((c) => c.name),
@@ -603,22 +602,53 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
       persist(() => db.patchEvent(id, { modules }));
     },
 
-    addComment: (id, text) => {
+    // ---------- le chat ----------
+    addComment: (id, text, replyTo = "") => {
       const cid = uid();
       let title = "";
       updateEvent(id, (e) => {
         title = e.title;
-        return { ...e, comments: [...(e.comments || []), { id: cid, by: me, text, at: Date.now() }] };
+        return { ...e, comments: [...(e.comments || []), { id: cid, by: me, text, at: Date.now(), replyTo, reactions: {} }] };
       });
-      persist(() => db.addComment(cid, id, me, text));
-      // Règle 3, versant commentaires. Le texte part dans la notification :
-      // le plus souvent il se suffit, et évite d'ouvrir l'app pour rien.
-      notifyEventActivity(id, title, `${meName} : ${text}`).catch(() => {});
+      persist(() => db.addComment(cid, id, me, text, replyTo));
+      // Le texte part dans la notification : le plus souvent il se suffit.
+      // La base choisit qui prévenir, et une seule fois tant qu'il n'a pas relu.
+      notifyChat(id, title, `${meName} : ${text}`).catch(() => {});
     },
     delComment: (id, cid) => {
       updateEvent(id, (e) => ({ ...e, comments: (e.comments || []).filter((c) => c.id !== cid) }));
       persist(() => db.delComment(cid));
     },
+    // Toucher une réaction déjà posée la retire.
+    react: (id, cid, emoji) => {
+      let on;
+      updateEvent(id, (e) => ({ ...e, comments: (e.comments || []).map((c) => {
+        if (c.id !== cid) return c;
+        const who = c.reactions?.[emoji] || [];
+        on = !who.includes(me);
+        return { ...c, reactions: { ...c.reactions, [emoji]: on ? [...who, me] : who.filter((x) => x !== me) } };
+      }) }));
+      persist(() => db.react(cid, id, me, emoji, on));
+    },
+    markRead: (id) => {
+      updateEvent(id, (e) => (e.unread ? { ...e, unread: 0 } : e));
+      db.markChatRead(id);
+    },
+    // Ce que le temps réel apporte des autres. Le sien revient aussi, déjà
+    // affiché : même identifiant, on l'ignore.
+    receiveComment: (id, c) => updateEvent(id, (e) =>
+      (e.comments || []).some((x) => x.id === c.id) ? e
+        : { ...e, comments: [...(e.comments || []), c], unread: (e.unread || 0) + (c.by === me ? 0 : 1) }),
+    dropComment: (id, cid) => updateEvent(id, (e) =>
+      (e.comments || []).some((x) => x.id === cid) ? { ...e, comments: e.comments.filter((x) => x.id !== cid) } : e),
+    receiveReaction: (id, cid, by, emoji, on) => updateEvent(id, (e) => {
+      if (!(e.comments || []).some((c) => c.id === cid)) return e;
+      return { ...e, comments: e.comments.map((c) => {
+        if (c.id !== cid) return c;
+        const who = (c.reactions?.[emoji] || []).filter((x) => x !== by);
+        return { ...c, reactions: { ...c.reactions, [emoji]: on ? [...who, by] : who } };
+      }) };
+    }),
 
     addTodo: (id, text, kind = "todo") => {
       const tid = uid();
@@ -764,7 +794,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
   return (
     <GroupCtx.Provider value={group}>
     <div className="root">
-      <style>{CSS}</style>
+      <style>{CSS + CHAT_CSS}</style>
       {loading ? (
         <div className="center"><div className="spinner" /></div>
       ) : (
@@ -781,7 +811,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
             </div>
           )}
           {selectedEvent ? (
-            <EventDetail ev={selectedEvent} me={me} members={members} actions={actions} onBack={closeEvent} onEdit={() => setModal("edit")} places={places} savedPlaces={savedPlaces} />
+            <EventDetail openChat={openChat && selectedEvent.id === initialEvent} ev={selectedEvent} me={me} members={members} actions={actions} onBack={closeEvent} onEdit={() => setModal("edit")} places={places} savedPlaces={savedPlaces} />
           ) : (
             <>
           <main className="wrap">
@@ -985,6 +1015,7 @@ function EventCard({ ev, me, onOpen, past }) {
           </div>
           {!ev.place && modOn(ev, "placePoll") && !past && <span className="cd poll"><MapPinned size={12} /> Lieu à voter</span>}
           <span className="count"><Users size={14} /> {going} chaud{going > 1 ? "s" : ""}</span>
+          {ev.unread > 0 && <span className="unread" aria-label={`${ev.unread} message${ev.unread > 1 ? "s" : ""} non lu${ev.unread > 1 ? "s" : ""}`}>💬 {ev.unread}</span>}
         </div>
       </div>
     </button>
@@ -992,7 +1023,7 @@ function EventCard({ ev, me, onOpen, past }) {
 }
 
 // ---------- event detail ----------
-function EventDetail({ ev, me, members, actions, onBack, onEdit, places, savedPlaces }) {
+function EventDetail({ ev, me, members, actions, onBack, onEdit, places, savedPlaces, openChat = false }) {
   const [confirmDel, setConfirmDel] = useState(false);
   const cities = useCities();
   const [shared, setShared] = useState(false);
@@ -1141,7 +1172,8 @@ function EventDetail({ ev, me, members, actions, onBack, onEdit, places, savedPl
           </div>
         )}
 
-        {modOn(ev, "comments") && <Comments ev={ev} me={me} actions={actions} />}
+        {/* Le chat remplace les commentaires : il est sur tous les events. */}
+        <Chat ev={ev} me={me} actions={actions} initialOpen={openChat} />
 
         {isCreator && <ModuleToggles ev={ev} actions={actions} />}
         <div className="detail-by">Créé par {nameOf(ev.createdBy)}</div>
@@ -1531,32 +1563,6 @@ function TodoList({ ev, me, actions, kind = "todo" }) {
       <div className="addrow">
         <input value={text} placeholder={conf.ph} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
         <button className="addbtn" onClick={add} disabled={!text.trim()}><Plus size={18} /></button>
-      </div>
-    </section>
-  );
-}
-
-// ---------- commentaires ----------
-function Comments({ ev, me, actions }) {
-  const [text, setText] = useState("");
-  const list = ev.comments || [];
-  const send = () => { if (!text.trim()) return; actions.addComment(ev.id, text.trim()); setText(""); };
-  return (
-    <section className="block">
-      <div className="block-head"><MessageSquare size={17} /> Commentaires {list.length > 0 && <span className="cnt">{list.length}</span>}</div>
-      {list.length === 0 && <p className="block-hint">Lancez la discussion sur ce plan.</p>}
-      {list.map((c) => (
-        <div className="cmt" key={c.id}>
-          <span className="cmt-av">{initials(nameOf(c.by))}</span>
-          <div className="cmt-body">
-            <div className="cmt-head"><b>{nameOf(c.by)}</b><span className="soft">{timeAgo(c.at)}</span>{c.by === me && <button className="cmt-del" aria-label="Supprimer le commentaire" onClick={() => actions.delComment(ev.id, c.id)}><X size={13} /></button>}</div>
-            <p>{c.text}</p>
-          </div>
-        </div>
-      ))}
-      <div className="addrow">
-        <input value={text} placeholder="Écris un message…" onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} />
-        <button className="addbtn" onClick={send} disabled={!text.trim()}><Send size={17} /></button>
       </div>
     </section>
   );
@@ -2029,6 +2035,7 @@ a{text-decoration:none;color:inherit;}
 .card-meta span{display:flex;align-items:center;min-width:0;}
 .mk{flex-shrink:0;width:19px;display:inline-flex;align-items:center;justify-content:center;font-style:normal;font-size:12px;line-height:1;}
 .card-meta span{display:inline-flex;align-items:center;gap:5px;}
+.unread{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:9px;background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:700;}
 .count{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;color:var(--ink);}
 .mine{font-size:12.5px;font-weight:600;}
 .section-label{font-size:12px;font-weight:600;color:var(--muted);margin:20px 4px 12px;}
@@ -2192,14 +2199,6 @@ a{text-decoration:none;color:inherit;}
 .addbtn{flex-shrink:0;width:44px;border-radius:12px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;}
 .addbtn:disabled{opacity:.4;}
 
-.cmt{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);}
-.cmt-av{flex-shrink:0;width:34px;height:34px;border-radius:10px;background:var(--accent-soft);color:var(--accent);font-weight:700;font-size:12px;font-family:'Bricolage Grotesque';display:flex;align-items:center;justify-content:center;}
-.cmt-body{flex:1;min-width:0;}
-.cmt-head{display:flex;align-items:center;gap:8px;margin-bottom:2px;}
-.cmt-head b{font-size:13.5px;}
-.cmt-head .soft{font-size:11.5px;}
-.cmt-del{margin:-10px -10px -10px auto;padding:10px;color:var(--muted);display:flex;}
-.cmt-body p{font-size:14px;line-height:1.45;color:#443E52;word-break:break-word;}
 
 .modrow{margin:22px 0 6px;padding:14px;border:1.5px dashed var(--line);border-radius:16px;background:#FBFAF7;}
 .modrow-lbl{font-size:12.5px;color:var(--muted);margin-bottom:10px;font-weight:600;}
