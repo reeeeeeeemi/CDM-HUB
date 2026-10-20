@@ -161,20 +161,42 @@ function Row({ ev, me, group, onOpen, id }) {
 }
 
 /** L'agenda : intercalaires par mois, les dates à voter à la fin, le passé replié. */
+// Les sections repliées, retenues par appareil et par groupe : c'est une
+// préférence d'affichage, pas une donnée du groupe.
+const foldKey = (g) => `hub:agenda-folded:${g}`;
+const readFolded = (g) => { try { return new Set(JSON.parse(window.localStorage.getItem(foldKey(g)) || "[]")); } catch { return new Set(); } };
+
 function Agenda({ events, me, group, onOpen, anchors = false }) {
   const [showPast, setShowPast] = useState(false);
+  const [folded, setFolded] = useState(() => readFolded(group.id));
+  const toggle = (key) => setFolded((prev) => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    try { window.localStorage.setItem(foldKey(group.id), JSON.stringify([...next])); } catch {}
+    return next;
+  });
+
   const up = events.filter((e) => e.date && !isPast(e)).sort((a, b) => a.date.localeCompare(b.date));
   const undated = events.filter((e) => !e.date);
   const past = events.filter(isPast).sort((a, b) => b.date.localeCompare(a.date));
   const thisYear = new Date().getFullYear();
+  // « Cette semaine » : jusqu'au dimanche, et ce qui a déjà commencé.
+  const sunday = isoOf(addDays(mondayOf(new Date()), 6));
 
-  const months = [];
+  const sections = [];
   for (const ev of up) {
-    const key = ev.date.slice(0, 7);
-    const last = months[months.length - 1];
+    const week = ev.date <= sunday;
+    const key = week ? "week" : ev.date.slice(0, 7);
+    const last = sections[sections.length - 1];
     if (last?.key === key) last.items.push(ev);
-    else months.push({ key, label: monthLabel(parse(ev.date), parse(ev.date).getFullYear() !== thisYear), items: [ev] });
+    else sections.push({
+      key,
+      label: week ? "Cette semaine" : monthLabel(parse(ev.date), parse(ev.date).getFullYear() !== thisYear),
+      items: [ev],
+    });
   }
+  if (undated.length) sections.push({ key: "undated", label: "Date à voter", items: undated });
+  const months = sections;
   // Pour le bandeau : une ancre sur le premier event de chaque jour.
   const seen = new Set();
   const anchorOf = (ev) => {
@@ -185,19 +207,20 @@ function Agenda({ events, me, group, onOpen, anchors = false }) {
 
   return (
     <div className="px-agenda">
-      {months.length === 0 && undated.length === 0 && <p className="px-empty">Rien de prévu ici.</p>}
-      {months.map((m) => (
-        <section key={m.key}>
-          <h3 className="px-month">{m.label}</h3>
-          {m.items.map((ev) => <Row key={ev.id} ev={ev} me={me} group={group} onOpen={onOpen} id={anchorOf(ev)} />)}
-        </section>
-      ))}
-      {undated.length > 0 && (
-        <section>
-          <h3 className="px-month">Date à voter</h3>
-          {undated.map((ev) => <Row key={ev.id} ev={ev} me={me} group={group} onOpen={onOpen} />)}
-        </section>
-      )}
+      {months.length === 0 && <p className="px-empty">Rien de prévu ici.</p>}
+      {/* Un intercalaire se touche pour replier sa section : on garde le
+          titre et le compte, on cache les lignes. */}
+      {months.map((m) => {
+        const shut = folded.has(m.key);
+        return (
+          <section key={m.key}>
+            <button className={"px-month" + (shut ? " shut" : "")} aria-expanded={!shut} onClick={() => toggle(m.key)}>
+              <ChevronDown size={15} /> {m.label} <span>{m.items.length}</span>
+            </button>
+            {!shut && m.items.map((ev) => <Row key={ev.id} ev={ev} me={me} group={group} onOpen={onOpen} id={anchorOf(ev)} />)}
+          </section>
+        );
+      })}
       {past.length > 0 && (
         <>
           <button className="px-past" onClick={() => setShowPast(!showPast)}>
@@ -257,13 +280,11 @@ function lanesFor(events, weekStart) {
 }
 
 function VariantC({ events, me, group, onOpen, onRsvp, toPlay = true }) {
-  const [mine, setMine] = useState(false);
   const [month, setMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [day, setDay] = useState(todayIso());
   // Un refus quitte le calendrier : il ne dit rien de ton emploi du temps.
   // L'event reste dans la liste, où l'on peut changer d'avis.
-  const notOut = events.filter((e) => answerOf(e, me) !== "out");
-  const shown = mine ? notOut.filter((e) => answerOf(e, me) === "in" || answerOf(e, me) === "maybe") : notOut;
+  const shown = events.filter((e) => answerOf(e, me) !== "out");
 
   const first = mondayOf(month);
   const last = addDays(new Date(month.getFullYear(), month.getMonth() + 1, 1), -1);
@@ -288,7 +309,6 @@ function VariantC({ events, me, group, onOpen, onRsvp, toPlay = true }) {
             <span key={k}><i style={{ background: k === "none" ? "transparent" : ANSWER[k].color, borderColor: ANSWER[k].color }} />{ANSWER[k].label}</span>
           ))}
         </div>
-        <label className="px-mine"><input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} /> Seulement mes plans (vert et orange)</label>
         <div className="px-dow">{["L", "M", "M", "J", "V", "S", "D"].map((d, i) => <span key={i}>{d}</span>)}</div>
         {weeks.map((w) => {
           const lanes = lanesFor(shown, w);
@@ -325,7 +345,7 @@ function VariantC({ events, me, group, onOpen, onRsvp, toPlay = true }) {
 
       <section className="px-dayl">
         <h3 className="px-month">{parse(day).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }).replace(/^./, (c) => c.toUpperCase())}</h3>
-        {dayEvents.length === 0 ? <p className="px-empty">Rien ce jour-là{mine ? " pour toi" : ""}.</p>
+        {dayEvents.length === 0 ? <p className="px-empty">Rien ce jour-là.</p>
           : dayEvents.map((ev) => <Row key={ev.id} ev={ev} me={me} group={group} onOpen={onOpen} />)}
         {undated.length > 0 && (
           <>
@@ -455,7 +475,12 @@ const CSS = `
 .px-play-txt em{font-style:normal;font-size:12.5px;color:var(--accent);font-weight:600;}
 .px-more{width:100%;border:0;background:none;color:var(--muted);font-weight:600;font-size:12.5px;padding:8px;}
 
-.px-month{font-family:'Bricolage Grotesque';font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:18px 2px 8px;}
+.px-month{display:flex;align-items:center;gap:6px;width:100%;padding:0;border:0;background:none;text-align:left;
+  font-family:'Bricolage Grotesque';font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:18px 2px 8px;}
+.px-month svg{transition:transform .15s;}
+.px-month.shut svg{transform:rotate(-90deg);}
+.px-month span{font-family:Inter,system-ui;font-size:11px;font-weight:700;letter-spacing:0;padding:1px 7px;border-radius:9px;background:var(--line);color:var(--muted);}
+.px-month.shut{margin-bottom:4px;}
 .px-agenda section:first-child .px-month{margin-top:4px;}
 .px-row{display:flex;align-items:center;gap:12px;width:100%;padding:10px 12px;margin-bottom:6px;background:var(--card);border:1px solid var(--line);border-radius:14px;text-align:left;color:var(--ink);scroll-margin:120px;}
 .px-row.past{opacity:.55;}
