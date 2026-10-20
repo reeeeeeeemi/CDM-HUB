@@ -313,7 +313,8 @@ function VariantC({ events, me, group, onOpen, onRsvp, toPlay = true }) {
                   <button key={ev.id + li} className={"px-bar" + (k === "none" ? " none" : "") + (cutLeft ? " cl" : "") + (cutRight ? " cr" : "")}
                     style={{ gridColumn: `${from + 1} / ${to + 2}`, gridRow: li + 2, "--a": a.color, "--s": a.soft }}
                     title={ev.title} onClick={() => onOpen(ev.id)}>
-                    {categoryOf(ev.category).emoji} {ev.title}
+                    {/* Le titre seul : dans 50 px de large, l'emoji mangeait la moitié du mot. */}
+                    {ev.title}
                   </button>
                 );
               }))}
