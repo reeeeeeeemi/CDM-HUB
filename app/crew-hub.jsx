@@ -27,6 +27,7 @@ import { cityEmoji as cityEmojiIn, groupBadge } from "@/lib/group";
 import { rememberGroup, openGroup } from "@/lib/actions/group";
 import { notifyNewEvent, notifyEventActivity, notifyAttendees, nudgeEvent, notifyChat } from "@/lib/actions/push";
 import Chat, { CHAT_CSS } from "./chat";
+import Home from "./home";
 
 // ---------- config ----------
 // Les catégories viennent du catalogue (lib/catalog.ts) ; chaque groupe en
@@ -353,16 +354,10 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
     list: group.cities.map((c) => c.name),
     has: (name) => group.cities.some((c) => c.name === name),
   }), [group.cities]);
-  const [scale, setScale] = useState("big");
-  // Un filtre de ville par échelle. Au quotidien, on part de la ville du
-  // profil : un plan resto à Bordeaux ne concerne pas qui vit à Toulouse.
-  // Les big events, eux, s'ouvrent sur « Toutes » — un ski se monte ailleurs
-  // que chez soi, et le filtrer par défaut le ferait disparaître.
-  const [cityBig, setCityBig] = useState("all");
-  // Sans villes, le groupe n'a pas de filtre : tout s'affiche.
-  const [cityDaily, setCityDaily] = useState(group.cities.length > 0 && notifyCity ? notifyCity : "all");
-  const city = scale === "big" ? cityBig : cityDaily;
-  const setCity = scale === "big" ? setCityBig : setCityDaily;
+  // Une seule liste, big events et quotidien mêlés : elle s'ouvre sur
+  // toutes les villes, un ski à Rome ne doit pas disparaître parce qu'on vit
+  // à Paris.
+  const [city, setCity] = useState("all");
   // Au retour sur le hub, on repart du dernier chargement : l'écran est là
   // tout de suite, et reload() le rafraîchit derrière.
   const [cached] = useState(() => db.cachedHub(group.id));
@@ -771,12 +766,7 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
     setNewCities((prev) => { const n = new Set(prev); if (c === "all") return new Set(); n.delete(c); return n; });
   };
 
-  const filtered = useMemo(() => {
-    const match = events.filter((e) => (e.scale || "daily") === scale && (city === "all" || e.city === city));
-    const keyed = match.map((e) => ({ e, k: e.date || "9999" }));
-    keyed.sort((a, b) => a.k.localeCompare(b.k));
-    return { up: keyed.filter((x) => !isPastEvent(x.e)).map((x) => x.e), past: keyed.filter((x) => isPastEvent(x.e)).reverse().map((x) => x.e) };
-  }, [events, scale, city]);
+  const filtered = useMemo(() => events.filter((e) => city === "all" || e.city === city), [events, city]);
 
   // Tous les lieux déjà écrits par le groupe : ceux des events et ceux des
   // sondages. Rien à demander à la base, tout est déjà chargé.
@@ -818,32 +808,28 @@ export default function App({ me: meFromAuth = null, meName = "", onSignOut = nu
                 {birthdaysToday(BIRTHDAYS).map((b) => (
                   <div className="bday" key={b.id}><Cake size={17} /> C&apos;est l&apos;anniv de <b>{nameOf(b.id)}</b> aujourd&apos;hui, {b.age} ans 🎉</div>
                 ))}
-                <div className="seg">
-                  <button className={scale === "big" ? "on" : ""} onClick={() => setScale("big")}><Sparkles size={15} /> Big events</button>
-                  <button className={scale === "daily" ? "on" : ""} onClick={() => setScale("daily")}>Au quotidien</button>
-                </div>
-                {/* Un groupe sans villes n'a pas de filtre : tout s'affiche. */}
-                {cities.list.length > 0 && (
-                  <div className="cities">
-                    <button className={"citychip" + (city === "all" ? " on" : "")} onClick={() => pickCity("all")}>Toutes</button>
-                    {cityChips.map((c) => (
-                      <button key={c} className={"citychip" + (city === c ? " on" : "")} onClick={() => pickCity(c)}>
-                        {cityEmojiIn(group.cities, c)} {c}{newCities.has(c) && <span className="dot" />}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <EventsView data={filtered} me={me} onOpen={openEvent} scale={scale} />
+                <Home events={events} filtered={filtered} me={me} group={group} onOpen={openEvent} onRsvp={actions.rsvp}
+                  cityBar={cities.list.length > 0 && (
+                    // Un groupe sans villes n'a pas de filtre : tout s'affiche.
+                    <div className="cities">
+                      <button className={"citychip" + (city === "all" ? " on" : "")} onClick={() => pickCity("all")}>Toutes</button>
+                      {cityChips.map((c) => (
+                        <button key={c} className={"citychip" + (city === c ? " on" : "")} onClick={() => pickCity(c)}>
+                          {cityEmojiIn(group.cities, c)} {c}{newCities.has(c) && <span className="dot" />}
+                        </button>
+                      ))}
+                    </div>
+                  )} />
           </main>
           <button className="fab" onClick={() => setModal("event")}>
             <Plus size={22} strokeWidth={2.4} />
-            <span>{scale === "big" ? "Ajouter un big event" : "Ajouter un event quotidien"}</span>
+            <span>Ajouter un event</span>
           </button>
             </>
           )}
         </>
       )}
-      {modal === "event" && <EventForm defScale={scale} defCity={city !== "all" ? city : ""} onClose={closeModal} onSave={addEvent} places={places} savedPlaces={savedPlaces} />}
+      {modal === "event" && <EventForm defScale="daily" defCity={city !== "all" ? city : ""} onClose={closeModal} onSave={addEvent} places={places} savedPlaces={savedPlaces} />}
       {news && !modal && !loading && <WhatsNew onClose={closeNews} />}
       {modal === "edit" && selectedEvent && <EventForm initial={selectedEvent} onClose={closeModal} onSave={(e) => editEvent(selectedEvent.id, e)} places={places} savedPlaces={savedPlaces} />}
     </div>
@@ -959,69 +945,6 @@ function Header({ meName, onSignOut, onHome, notifyCity, onSetCity, group, group
   );
 }
 
-// ---------- events list ----------
-function EventsView({ data, me, onOpen, scale }) {
-  const [showPast, setShowPast] = useState(false);
-  if (data.up.length === 0 && data.past.length === 0)
-    return <Empty icon={<CalendarDays size={26} />} title={scale === "big" ? "Aucun big event ici" : "Rien de prévu ici"}
-      text="Change de ville, ou lance le premier plan avec le bouton en bas." />;
-  return (
-    <>
-      {data.up.length === 0 && <Empty icon={<CalendarDays size={26} />} title="Rien à venir ici" text="Les events passés sont plus bas." />}
-      {data.up.map((ev) => <EventCard key={ev.id} ev={ev} me={me} onOpen={onOpen} />)}
-      {data.past.length > 0 && (
-        <div className="past-wrap">
-          <button className={"past-toggle" + (showPast ? " open" : "")} onClick={() => setShowPast((v) => !v)}>
-            <ChevronDown size={16} /> Events passés ({data.past.length})
-          </button>
-          {showPast && data.past.map((ev) => <EventCard key={ev.id} ev={ev} me={me} onOpen={onOpen} past />)}
-        </div>
-      )}
-    </>
-  );
-}
-function EventCard({ ev, me, onOpen, past }) {
-  const cat = categoryOf(ev.category);
-  const cities = useCities();
-  const cd = countdown(ev.date, ev.endDate, ev.time, ev.endTime);
-  const going = Object.values(ev.rsvps || {}).filter((s) => s === "in").length;
-  const mine = ev.rsvps?.[me];
-  const noDate = !ev.date;
-  return (
-    <button className={"card" + (past ? " past" : "")} onClick={() => onOpen(ev.id)} style={{ "--cat": cat.color }}>
-      <div className="card-stripe" />
-      <div className="card-body">
-        <div className="card-main">
-          <span className="tag" style={{ color: cat.color, background: cat.color + "18" }}>{cat.emoji} {cat.label}</span>
-          <h3 className="card-title">{ev.title}</h3>
-          <div className="card-meta">
-            {/* Chaque ligne commence par une gouttière de même largeur : un
-                SVG et un emoji ne mesurent pas pareil, et les deux textes
-                démarraient à deux verticales différentes. */}
-            <span><i className="mk"><CalendarDays size={13} /></i>{fmtRange(ev.date, ev.endDate)}{ev.time && !ev.endDate ? ` · ${ev.time}` : ""}</span>
-            {ev.city && <span><i className="mk">{cities.emoji(ev.city)}</i>{ev.city}</span>}
-          </div>
-        </div>
-        {/* Colonne de droite : quand, ta réponse, combien de chauds. Les trois
-            repères qu'on lit en diagonale sur une liste, alignés entre eux
-            plutôt que dispersés aux quatre coins de la carte. */}
-        <div className="card-side">
-          {/* Ta réponse colle au compte à rebours : les deux disent quand et
-              avec qui, on les lit d'un même coup d'œil. */}
-          <div className="card-when">
-            {mine && <span className="mine" style={{ color: RS[mine].color }}>{RS[mine].short}</span>}
-            {noDate && !past ? <span className="cd poll"><CalendarClock size={12} /> Date à voter</span>
-              : cd && !past && <span className={"cd" + (cd.live ? " live" : cd.soon ? " hot" : "")}>{cd.text}</span>}
-          </div>
-          {!ev.place && modOn(ev, "placePoll") && !past && <span className="cd poll"><MapPinned size={12} /> Lieu à voter</span>}
-          <span className="count"><Users size={14} /> {going} chaud{going > 1 ? "s" : ""}</span>
-          {ev.unread > 0 && <span className="unread" aria-label={`${ev.unread} message${ev.unread > 1 ? "s" : ""} non lu${ev.unread > 1 ? "s" : ""}`}>💬 {ev.unread}</span>}
-        </div>
-      </div>
-    </button>
-  );
-}
-
 // ---------- event detail ----------
 function EventDetail({ ev, me, members, actions, onBack, onEdit, places, savedPlaces, openChat = false }) {
   const [confirmDel, setConfirmDel] = useState(false);
@@ -1065,43 +988,41 @@ function EventDetail({ ev, me, members, actions, onBack, onEdit, places, savedPl
     ? (ev.endTime ? `${ev.time} – ${ev.endTime}${overnight ? " (le lendemain)" : ""}` : ev.time)
     : "";
 
-  return (
-    <div className="detail">
-      <div className="detail-hero" style={{ background: `linear-gradient(135deg, ${cat.color}, color-mix(in srgb, ${cat.color} 78%, #000))` }}>
-        <div className="detail-top">
-          <button className="ghost-btn light sm" onClick={onBack}><ChevronLeft size={15} /> Retour</button>
-          <button className="ghost-btn light sm" onClick={share}>
-            {shared ? <><Check size={14} /> Lien copié</> : <><Share2 size={14} /> Partager</>}
-          </button>
-        </div>
-        {ev.date && (
-          <div className="cal-block">
-            {/* Sous Partager : les deux gestes qu'on fait en découvrant un
-                plan — le transmettre, et le poser dans son agenda. */}
-            <button className="ghost-btn light sm" aria-expanded={calOpen}
-              onClick={() => setCalOpen((o) => !o)}>
-              <CalendarPlus size={14} /> Ajouter à mon agenda
-            </button>
-            {calOpen && (
-              <div className="cal-row">
-                <button className="cal-btn light" onClick={() => { downloadICS(ev); setCalOpen(false); }}>Apple / iCal</button>
-                <a className="cal-btn light" href={googleCalUrl(ev)} target="_blank" rel="noopener noreferrer">Google Agenda</a>
-              </div>
-            )}
-          </div>
-        )}
-        <div className="detail-emoji">{cat.emoji}</div>
-        <div className="detail-tags">
-          <span className="tag light">{cat.label}</span>
-          {isBig && <span className="tag light"><Sparkles size={12} /> Big event</span>}
-          {ev.city && <span className="tag light">{cities.emoji(ev.city)} {ev.city}</span>}
-        </div>
-        <h1 className="detail-title">{ev.title}</h1>
-        <div className="detail-cds">
-          {ev.date ? (cd && !cd.past && <div className="detail-cd">{cd.text}</div>) : <div className="detail-cd"><CalendarClock size={13} /> Date à voter</div>}
-          {!ev.place && modOn(ev, "placePoll") && <div className="detail-cd"><MapPinned size={13} /> Lieu à voter</div>}
+  // L'en-tête : la couleur de la catégorie en teinte, le titre, une ligne
+  // d'infos. Les boutons en icônes, pour laisser la place au plan.
+  const head = (
+    <div className="dh" style={{ "--c": cat.color }}>
+      <div className="dh-top">
+        <button className="dh-ic" onClick={onBack} aria-label="Retour"><ChevronLeft size={19} /></button>
+        <div className="dh-acts">
+          {ev.date && <button className={"dh-ic" + (calOpen ? " on" : "")} aria-label="Ajouter à mon agenda" aria-expanded={calOpen} onClick={() => setCalOpen((o) => !o)}><CalendarPlus size={17} /></button>}
+          <button className="dh-ic" aria-label="Partager" onClick={share}>{shared ? <Check size={17} /> : <Share2 size={17} />}</button>
         </div>
       </div>
+      {calOpen && (
+        <div className="dh-cal">
+          <button className="cal-btn" onClick={() => { downloadICS(ev); setCalOpen(false); }}>Apple / iCal</button>
+          <a className="cal-btn" href={googleCalUrl(ev)} target="_blank" rel="noopener noreferrer">Google Agenda</a>
+        </div>
+      )}
+      <div className="dh-main">
+        <span className="dh-emoji">{cat.emoji}</span>
+        <h1 className="dh-title">{ev.title}</h1>
+      </div>
+      <div className="dh-meta">
+        <span style={{ color: cat.color, fontWeight: 700 }}>{cat.label}</span>
+        {isBig && <span><Sparkles size={12} /> Big event</span>}
+        {ev.city && <span>{cities.emoji(ev.city)} {ev.city}</span>}
+        {ev.date ? (cd && !cd.past && <span className="dh-cd">{cd.text}</span>)
+          : <span className="dh-cd"><CalendarClock size={12} /> Date à voter</span>}
+        {!ev.place && modOn(ev, "placePoll") && <span className="dh-cd"><MapPinned size={12} /> Lieu à voter</span>}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="detail">
+      {head}
 
       <div className="wrap">
         <div className="info-row"><CalendarDays size={18} /><div><b>{fmtRange(ev.date, ev.endDate)}</b>{timeLabel && <span className="soft"> · {timeLabel}</span>}</div></div>
@@ -1122,7 +1043,7 @@ function EventDetail({ ev, me, members, actions, onBack, onEdit, places, savedPl
           </div>
         )}
 
-        {ev.description && <div className="detail-desc">{ev.description}</div>}
+        {ev.description && <OrganizerNote text={ev.description} by={ev.createdBy} color={cat.color} />}
 
         <div className="rsvp-box">
           <div className="rsvp-q">Tu es chaud ?</div>
@@ -1198,6 +1119,63 @@ function EventDetail({ ev, me, members, actions, onBack, onEdit, places, savedPl
   );
 }
 
+// ---------- le mot de l'organisateur ----------
+const URL_RE = /(https?:\/\/[^\s]+|www\.[^\s]+)/;
+// Sans drapeau g : un test répété ne garde pas de position d'un appel à l'autre.
+const IS_URL = /^(https?:\/\/|www\.)/;
+
+/** Les liens deviennent cliquables, le reste reste du texte. */
+function linkify(line) {
+  return line.split(URL_RE).map((part, i) =>
+    IS_URL.test(part)
+      ? <a key={i} href={normUrl(part)} target="_blank" rel="noopener noreferrer">{part.replace(/^https?:\/\//, "")}</a>
+      : part);
+}
+
+/**
+ * La description lue comme ce qu'elle est : un message de l'organisateur.
+ * Des paragraphes séparés par une ligne vide, des lignes en « - » qui
+ * deviennent une vraie liste, et un pli au-delà de quelques lignes.
+ */
+function OrganizerNote({ text, by, color }) {
+  const [open, setOpen] = useState(false);
+  const [long, setLong] = useState(false);
+  const body = useRef(null);
+  useEffect(() => {
+    const el = body.current;
+    if (el) setLong(el.scrollHeight > 168);
+  }, [text]);
+
+  const blocks = text.trim().split(/\n\s*\n/).map((block, b) => {
+    const lines = block.split("\n").map((l) => l.trim()).filter(Boolean);
+    const out = [];
+    let list = [];
+    const flush = () => { if (list.length) { out.push(<ul key={`l${out.length}`}>{list.map((x, i) => <li key={i}>{linkify(x)}</li>)}</ul>); list = []; } };
+    for (const l of lines) {
+      const m = l.match(/^[-•*]\s+(.*)$/);
+      if (m) list.push(m[1]);
+      else { flush(); out.push(<p key={`p${out.length}`}>{linkify(l)}</p>); }
+    }
+    flush();
+    return <div className="note-block" key={b}>{out}</div>;
+  });
+
+  return (
+    <section className="note" style={{ "--c": color }}>
+      <div className="note-head">
+        <span className="note-av">{initials(nameOf(by))}</span>
+        <span>Le mot de <b>{nameOf(by)}</b></span>
+      </div>
+      <div className={"note-body" + (long && !open ? " folded" : "")} ref={body}>{blocks}</div>
+      {long && (
+        <button className="note-more" onClick={() => setOpen((o) => !o)}>
+          {open ? "Réduire" : "Lire la suite"} <ChevronDown size={15} style={{ transform: open ? "rotate(180deg)" : "" }} />
+        </button>
+      )}
+    </section>
+  );
+}
+
 /** Copie un code ; la coche dit que c'est fait, sans toast à part. */
 function CopyBtn({ text, label }) {
   const [done, setDone] = useState(false);
@@ -1220,14 +1198,13 @@ function CopyBtn({ text, label }) {
 // ---------- quoi de neuf ----------
 // À chaque nouveau lot : réécrire la liste et augmenter NEWS_VERSION. La
 // fenêtre s'ouvre une fois par téléphone, pour qui avait déjà l'app.
-const NEWS_VERSION = 1;
+const NEWS_VERSION = 2;
 const NEWS = [
-  ["🎂", "Anniversaires", "mets ton anniv dans Réglages, le groupe sera prévenu le jour J"],
-  ["🏠", "Nos lieux", "adresse, code, wifi de chez chacun, dans le menu en haut à droite"],
-  ["🔔", "Relance", "le créateur d'un event peut relancer ceux qui n'ont pas répondu"],
-  ["✏️", "Modifier un event", "après l'avoir créé"],
-  ["🚗", "Trajets", "précise le jour et l'heure de ton départ"],
-  ["✨", "Et aussi", "formulaire plus court, Réglages plus clairs, appli plus rapide"],
+  ["👋", "À toi de jouer", "en haut de l'accueil, les plans qui attendent ta réponse : ✓ ? ✕ sans ouvrir l'event"],
+  ["🗓️", "Liste ou calendrier", "les plans rangés par mois (touche un mois pour le replier), ou ton mois en couleurs"],
+  ["💬", "Un chat par event", "la bulle en bas de chaque event : réactions, réponses, et un point rouge quand ça parle"],
+  ["👥", "Plusieurs groupes", "crée le tien ou passe de l'un à l'autre en touchant le nom en haut à gauche"],
+  ["⏱️", "Compte à rebours", "J-2, Demain, Dans 20 min : enfin juste, même le soir"],
 ];
 
 function WhatsNew({ onClose }) {
@@ -1914,7 +1891,6 @@ function Modal({ title, children, onClose, dirty = false }) {
     </div>
   );
 }
-function Empty({ icon, title, text }) { return <div className="empty"><div className="empty-ic">{icon}</div><h3>{title}</h3><p>{text}</p></div>; }
 
 
 // ---------- styles ----------
@@ -2004,21 +1980,15 @@ a{text-decoration:none;color:inherit;}
 .card:active{transform:translateY(0);}
 /* Pas d'opacité : elle faisait passer tout le texte sous le seuil de lecture. */
 .card.past{filter:grayscale(.7);box-shadow:none;}
-.card-stripe{width:6px;background:var(--cat);flex-shrink:0;}
 /* stretch : la colonne de droite occupe toute la hauteur de la carte,
    condition pour que le compteur puisse être poussé tout en bas. */
-.card-body{padding:11px 14px;flex:1;min-width:0;display:flex;align-items:stretch;gap:12px;}
-.card-main{flex:1;min-width:0;}
-.card-main .tag{margin-bottom:6px;}
 /* flex-shrink:0 : la colonne garde sa largeur, c'est le titre qui passe
    à la ligne — l'inverse tasserait « Toi : peut-être » en accordéon. */
 /* space-between répartit les trois repères à intervalles égaux sur toute
    la hauteur : le compte à rebours en haut, le compteur en bas, ta
    réponse au milieu. Le gap ne sert plus que de distance minimale. */
-.card-side{flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;gap:6px;text-align:right;}
 /* wrap : sur un écran étroit, ta réponse passe au-dessus plutôt que de
    voler la largeur du titre. */
-.card-when{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:5px 7px;}
 .tag{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:4px 10px;border-radius:20px;white-space:nowrap;}
 .tag.sm{font-size:11.5px;padding:3px 9px;}
 .tag.ghost{background:var(--bg);color:var(--muted);}
@@ -2027,51 +1997,60 @@ a{text-decoration:none;color:inherit;}
 .cd.hot{color:#fff;background:#BE185D;}
 .cd.live{color:#fff;background:#0F766E;}
 .cd.poll{color:#B45309;background:#FEF3C7;}
-.card-title{font-size:17px;font-weight:700;line-height:1.2;}
 /* Une ligne chacune, toujours : la date et la ville se retrouvaient côte
    à côte ou l'une sous l'autre selon la longueur de la date, si bien que
    deux cartes voisines ne se lisaient pas au même endroit. */
-.card-meta{display:flex;flex-direction:column;align-items:flex-start;gap:3px;margin:6px 0 0;color:var(--muted);font-size:12.5px;}
-.card-meta span{display:flex;align-items:center;min-width:0;}
 .mk{flex-shrink:0;width:19px;display:inline-flex;align-items:center;justify-content:center;font-style:normal;font-size:12px;line-height:1;}
-.card-meta span{display:inline-flex;align-items:center;gap:5px;}
-.unread{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:9px;background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:700;}
-.count{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;color:var(--ink);}
-.mine{font-size:12.5px;font-weight:600;}
 .section-label{font-size:12px;font-weight:600;color:var(--muted);margin:20px 4px 12px;}
 
-.past-wrap{margin-top:18px;}
-.past-toggle{display:flex;align-items:center;gap:7px;width:100%;padding:12px 15px;background:transparent;border:1.5px dashed var(--line);border-radius:14px;color:var(--muted);font-weight:600;font-size:13.5px;transition:.15s;}
-.past-toggle:hover{border-color:var(--muted);}
-.past-toggle svg{transition:transform .2s;}
-.past-toggle.open{margin-bottom:12px;}
-.past-toggle.open svg{transform:rotate(180deg);}
 
 /* La fiche vit désormais sous le header : elle ne doit plus réclamer
    toute la hauteur de l'écran, sinon la page dépasse d'autant. */
 .detail{min-height:auto;}
-.detail-hero{padding:16px 18px 30px;color:#fff;border-radius:0 0 26px 26px;}
-.detail-emoji{font-size:44px;margin:16px 0 10px;}
-.detail-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
+/* Une teinte de la catégorie, plus franche en haut, qui se fond dans la page :
+   on reconnaît le plan d'un coup d'œil sans l'aplat d'autrefois. */
+.note{margin:18px 0;padding:14px 16px 12px;background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:0 2px 10px rgba(33,29,43,.04);}
+/* Même titre que les autres sections de la fiche (.block-head). */
+.note-head{display:flex;align-items:center;gap:9px;margin-bottom:10px;font-family:'Bricolage Grotesque';font-weight:700;font-size:16px;color:var(--muted);}
+.note-head b{color:var(--ink);font-weight:700;}
+.note-av{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:var(--c);color:#fff;font-family:'Bricolage Grotesque';font-weight:700;font-size:11px;}
+.note-body{position:relative;font-size:15px;line-height:1.55;color:var(--ink);overflow:hidden;}
+.note-body.folded{max-height:150px;}
+.note-body.folded::after{content:"";position:absolute;left:0;right:0;bottom:0;height:46px;background:linear-gradient(transparent, var(--card));}
+.note-block+.note-block{margin-top:11px;}
+.note-body p+p,.note-body p+ul,.note-body ul+p{margin-top:4px;}
+.note-body ul{margin:4px 0 0;padding:0;list-style:none;}
+.note-body li{position:relative;padding-left:18px;margin-top:3px;}
+.note-body li::before{content:"";position:absolute;left:5px;top:.62em;width:6px;height:6px;border-radius:50%;background:var(--c);}
+.note-body a{color:var(--c);font-weight:600;text-decoration:underline;text-underline-offset:2px;word-break:break-all;}
+.note-more{display:flex;align-items:center;gap:4px;margin-top:8px;padding:0;border:0;background:none;color:var(--c);font-weight:700;font-size:13.5px;}
+.dh{padding:10px 18px 18px;border-radius:0 0 24px 24px;
+  background:linear-gradient(180deg, color-mix(in srgb, var(--c) 26%, var(--bg)) 0%, color-mix(in srgb, var(--c) 9%, var(--bg)) 100%);}
+.dh-top{display:flex;align-items:center;justify-content:space-between;}
+.dh-acts{display:flex;gap:6px;}
+.dh-ic{display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);}
+.dh-ic.on{background:var(--ink);color:#fff;border-color:var(--ink);}
+.dh-cal{display:flex;justify-content:flex-end;gap:8px;margin-top:8px;}
+.dh-main{display:flex;align-items:center;gap:12px;margin-top:14px;}
+.dh-emoji{flex-shrink:0;display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:15px;font-size:25px;
+  background:var(--c);box-shadow:0 6px 16px color-mix(in srgb, var(--c) 35%, transparent);}
+.dh-title{font-family:'Bricolage Grotesque';font-size:23px;font-weight:800;line-height:1.1;letter-spacing:-.4px;}
+.dh-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-top:10px;font-size:13px;color:var(--muted);}
+.dh-meta span{display:inline-flex;align-items:center;gap:4px;}
+.dh-cd{padding:3px 9px;border-radius:9px;font-family:'Bricolage Grotesque';font-weight:700;font-size:13.5px;background:var(--c);color:#fff;}
+.dh-ic{border-color:color-mix(in srgb, var(--c) 25%, var(--line));}
 .ghost-btn{display:inline-flex;align-items:center;gap:4px;font-weight:600;font-size:14px;padding:7px 12px 7px 8px;border-radius:10px;color:var(--muted);}
 /* sm : dans le bandeau, ces boutons sont des raccourcis, pas le sujet. */
 .ghost-btn.sm{gap:5px;font-size:12.5px;padding:9px 12px;border-radius:10px;min-height:36px;}
 .ghost-btn.light{background:rgba(255,255,255,.18);color:#fff;}
 .ghost-btn.danger{color:#DC2626;}
-.detail-title{font-size:29px;font-weight:800;line-height:1.05;}
-.detail-cds{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;}
-.detail-cd{display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,.22);font-family:'Bricolage Grotesque';font-weight:700;padding:6px 14px;border-radius:12px;font-size:15px;}
 .info-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);color:var(--accent);}
 .info-row div{color:var(--ink);font-size:15px;}
 .info-row .soft{color:var(--muted);font-weight:400;}
-.detail-desc{margin:18px 0;padding:14px 16px;border-left:3px solid var(--accent);background:var(--card);border-radius:0 14px 14px 0;line-height:1.6;color:var(--ink);font-size:16.5px;white-space:pre-wrap;}
 
-.detail-top{display:flex;align-items:center;justify-content:space-between;gap:10px;}
 /* Dans le bandeau coloré : aligné à droite, sous le bouton Partager. */
-.cal-block{margin-top:12px;display:flex;flex-direction:column;align-items:flex-end;gap:7px;}
 .cal-btn.light{border-color:rgba(255,255,255,.4);background:rgba(255,255,255,.14);color:#fff;flex:0 0 auto;}
 .cal-btn.light:hover{background:rgba(255,255,255,.26);border-color:rgba(255,255,255,.7);color:#fff;}
-.cal-row{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;}
 .cal-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:8px 12px;border-radius:11px;border:1.5px solid var(--line);background:var(--card);font-weight:600;font-size:12.5px;color:var(--ink);transition:.12s;}
 .cal-btn:hover{border-color:var(--accent);color:var(--accent);}
 
@@ -2235,7 +2214,6 @@ a{text-decoration:none;color:inherit;}
 .fab:active{transform:translateX(-50%) scale(.97);}
 
 .empty{text-align:center;padding:54px 30px;}
-.empty-ic{width:60px;height:60px;border-radius:18px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;}
 .empty h3{font-size:20px;font-weight:700;margin-bottom:8px;}
 .empty p{color:var(--muted);line-height:1.5;max-width:32ch;margin:0 auto;font-size:14.5px;}
 
