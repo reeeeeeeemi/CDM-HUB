@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { isAuthRetryableFetchError } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/server";
 
@@ -53,8 +54,13 @@ export async function readViewer(prefer?: string): Promise<Viewer | null> {
   // d'un accès côté serveur.
   const {
     data: { user },
+    error,
   } = await supabase.auth.getUser();
 
+  // Supabase injoignable n'est pas « déconnecté » : renvoyer null mènerait
+  // à /login, donc à retaper un mot de passe valide. On laisse app/error.tsx
+  // proposer de réessayer.
+  if (isAuthRetryableFetchError(error)) throw error;
   if (!user) return null;
 
   // En parallèle : les deux lectures ne dépendent que de l'identifiant, et

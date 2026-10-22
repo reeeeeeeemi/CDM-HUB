@@ -1,4 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
+import { isAuthRetryableFetchError } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { COOKIE_OPTIONS, SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/supabase/env";
@@ -36,11 +37,21 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  // Do not add code between createServerClient and getUser(): the token
+  // Do not add code between createServerClient and getClaims(): the token
   // refresh must happen first, or the session can end up out of sync.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  //
+  // getClaims plutôt que getUser : le projet signe ses jetons en ES256, le
+  // jeton se vérifie donc ici, sans aller-retour vers Supabase tant qu'il n'a
+  // pas expiré. Chaque appel réseau en moins est une occasion de moins de
+  // conclure à tort qu'on est déconnecté.
+  const { data, error } = await supabase.auth.getClaims();
+  const user = data?.claims ?? null;
+
+  // Supabase injoignable (réseau qui se réveille à l'ouverture de l'app
+  // depuis l'écran d'accueil, lenteur passagère) ne veut pas dire « pas de
+  // session ». L'envoyer sur /login lui faisait retaper son mot de passe
+  // alors que son cookie était bon : on laisse passer, la page tranchera.
+  const unreachable = isAuthRetryableFetchError(error);
 
   // Optimistic check only — it saves rendering a page the visitor cannot see.
   // The real authorisation lives in app/page.tsx and in the RLS policies.
@@ -62,7 +73,7 @@ export async function proxy(request: NextRequest) {
     // elle-même, par le secret de Vercel et celui de la fonction SQL.
     pathname.startsWith("/api");
 
-  if (!user && !isPublic) {
+  if (!user && !unreachable && !isPublic) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     // Garde la destination, pour y revenir une fois connecté.
