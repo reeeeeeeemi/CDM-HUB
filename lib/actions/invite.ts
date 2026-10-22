@@ -2,7 +2,7 @@
 
 import { headers } from "next/headers";
 
-import { createClient } from "@/lib/supabase/server";
+import { actionUser, createClient } from "@/lib/supabase/server";
 
 const DAYS = 7;
 
@@ -15,11 +15,9 @@ const DAYS = 7;
 export async function createInvite(groupId: string): Promise<{ url?: string; error?: string }> {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user, error: authError } = await actionUser(supabase);
 
-  if (!user) return { error: "Session expirée." };
+  if (!user) return { error: authError };
 
   const expires = new Date(Date.now() + DAYS * 24 * 60 * 60 * 1000).toISOString();
 

@@ -1,4 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
+import { isAuthRetryableFetchError, type User } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 
 import { COOKIE_OPTIONS, SUPABASE_ANON_KEY, SUPABASE_URL } from "./env";
@@ -30,4 +31,44 @@ export async function createClient() {
       },
     },
   });
+}
+
+type Client = Awaited<ReturnType<typeof createClient>>;
+
+/**
+ * L'utilisateur de la session, null s'il n'y en a pas.
+ *
+ * getUser valide le jeton auprès de Supabase. getSession se contenterait de
+ * lire le cookie, qui est falsifiable — ne jamais s'en servir pour décider
+ * d'un accès côté serveur.
+ *
+ * Supabase injoignable n'est pas « déconnecté » : renvoyer null mènerait à
+ * /login, et l'on se retrouvait sur l'écran de connexion avec une session
+ * intacte. On lève l'erreur, app/error.tsx propose de réessayer.
+ */
+export async function currentUser(supabase: Client) {
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
+  if (isAuthRetryableFetchError(error)) throw error;
+  return user;
+}
+
+/**
+ * La même chose pour les Server Actions, qui rendent leurs erreurs au
+ * formulaire plutôt que de les lever.
+ */
+export async function actionUser(
+  supabase: Client
+): Promise<{ user: User; error: null } | { user: null; error: string }> {
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
+  if (isAuthRetryableFetchError(error)) {
+    return { user: null, error: "Pas de réseau. Réessaie dans un instant." };
+  }
+  if (!user) return { user: null, error: "Session expirée." };
+  return { user, error: null };
 }

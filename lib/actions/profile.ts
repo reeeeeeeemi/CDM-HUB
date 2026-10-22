@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { createClient } from "@/lib/supabase/server";
+import { actionUser, createClient } from "@/lib/supabase/server";
 import { isPseudoTaken } from "@/lib/group";
 
 /**
@@ -13,11 +13,9 @@ import { isPseudoTaken } from "@/lib/group";
 export async function setNotifyCity(city: string) {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user, error: authError } = await actionUser(supabase);
 
-  if (!user) return { error: "Session expirée." };
+  if (!user) return { error: authError };
 
   const { error } = await supabase
     .from("profiles")
@@ -43,11 +41,9 @@ export async function setNotifyPrefs(prefs: {
 }) {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user, error: authError } = await actionUser(supabase);
 
-  if (!user) return { error: "Session expirée." };
+  if (!user) return { error: authError };
 
   // Seules les clés fournies sont écrites : l'interface n'envoie que
   // l'interrupteur qu'on vient de basculer.
@@ -75,11 +71,9 @@ export async function setNotifyPrefs(prefs: {
 export async function setNotifyCities(cities: string[]) {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user, error: authError } = await actionUser(supabase);
 
-  if (!user) return { error: "Session expirée." };
+  if (!user) return { error: authError };
 
   const { error } = await supabase
     .from("profiles")
@@ -103,11 +97,9 @@ export async function setPseudo(groupId: string, pseudo: string) {
 
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user, error: authError } = await actionUser(supabase);
 
-  if (!user) return { error: "Session expirée." };
+  if (!user) return { error: authError };
 
   const { error } = await supabase
     .from("members")
@@ -130,11 +122,9 @@ export async function setBirthday(date: string) {
 
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user, error: authError } = await actionUser(supabase);
 
-  if (!user) return { error: "Session expirée." };
+  if (!user) return { error: authError };
 
   const { error } = await supabase
     .from("profiles")

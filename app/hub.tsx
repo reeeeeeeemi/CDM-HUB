@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
-import { isAuthRetryableFetchError } from "@supabase/supabase-js";
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient, currentUser } from "@/lib/supabase/server";
 
 import CrewHub from "./crew-hub";
 import { setNotifyCity } from "@/lib/actions/profile";
@@ -49,18 +48,7 @@ type MemberRow = {
 export async function readViewer(prefer?: string): Promise<Viewer | null> {
   const supabase = await createClient();
 
-  // getUser valide le jeton auprès de Supabase. getSession se contenterait de
-  // lire le cookie, qui est falsifiable — ne jamais s'en servir pour décider
-  // d'un accès côté serveur.
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-
-  // Supabase injoignable n'est pas « déconnecté » : renvoyer null mènerait
-  // à /login, donc à retaper un mot de passe valide. On laisse app/error.tsx
-  // proposer de réessayer.
-  if (isAuthRetryableFetchError(error)) throw error;
+  const user = await currentUser(supabase);
   if (!user) return null;
 
   // En parallèle : les deux lectures ne dépendent que de l'identifiant, et

@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { createClient } from "@/lib/supabase/server";
+import { actionUser, createClient } from "@/lib/supabase/server";
 import { GROUP_COOKIE, type City } from "@/lib/group";
 import { CATEGORIES, MAX_CATEGORIES, MIN_CATEGORIES } from "@/lib/catalog";
 import { COOKIE_OPTIONS } from "@/lib/supabase/env";
@@ -115,10 +115,8 @@ export async function createGroup(g: NewGroup): Promise<{ error?: string }> {
 /** « Couper ce groupe » : plus aucune notification venue de lui. */
 export async function setGroupMuted(groupId: string, muted: boolean) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Session expirée." };
+  const { user, error: authError } = await actionUser(supabase);
+  if (!user) return { error: authError };
 
   const { error } = await supabase
     .from("members")

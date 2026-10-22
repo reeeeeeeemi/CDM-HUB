@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { actionUser, createClient } from "@/lib/supabase/server";
 import { sendPush, type PushTarget } from "@/lib/push-send";
 
 /** Ce que le navigateur renvoie après un `pushManager.subscribe()`. */
@@ -12,10 +12,8 @@ export type BrowserSubscription = {
 /** Enregistre l'appareil courant. Un même compte peut en avoir plusieurs. */
 export async function savePushSubscription(sub: BrowserSubscription) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Session expirée." };
+  const { user, error: authError } = await actionUser(supabase);
+  if (!user) return { error: authError };
 
   // upsert : réactiver les notifications sur un appareil déjà connu ne doit
   // pas échouer sur la clé primaire.

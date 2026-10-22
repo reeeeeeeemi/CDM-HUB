@@ -8,7 +8,7 @@ import { headers } from "next/headers";
 import { createClient as createImplicitClient } from "@supabase/supabase-js";
 
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/supabase/env";
-import { createClient } from "@/lib/supabase/server";
+import { actionUser, createClient } from "@/lib/supabase/server";
 
 export type AuthState = { error?: string; notice?: string };
 
@@ -136,12 +136,14 @@ export async function updatePassword(_prev: AuthState, formData: FormData): Prom
   const supabase = await createClient();
 
   // Le lien de récupération a ouvert une session ; sans elle, rien à modifier.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user, error: authError } = await actionUser(supabase);
 
   if (!user) {
-    return { error: "Ton lien a expiré. Redemande-en un depuis l'écran de connexion." };
+    return {
+      error: authError === "Session expirée."
+        ? "Ton lien a expiré. Redemande-en un depuis l'écran de connexion."
+        : authError,
+    };
   }
 
   const { error } = await supabase.auth.updateUser({ password });

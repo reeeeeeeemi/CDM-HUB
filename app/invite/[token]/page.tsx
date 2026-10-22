@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient, currentUser } from "@/lib/supabase/server";
 import { APP_NAME } from "@/lib/brand";
 import { groupBadge } from "@/lib/group";
 
@@ -33,8 +33,8 @@ export default async function InvitePage({ params }: PageProps<"/invite/[token]"
   const { token } = await params;
   const supabase = await createClient();
 
-  const [{ data: { user } }, { data }] = await Promise.all([
-    supabase.auth.getUser(),
+  const [user, { data }] = await Promise.all([
+    currentUser(supabase),
     supabase.rpc("invite_preview", { token }),
   ]);
   const p = ((data ?? [])[0] ?? { status: "invalid" }) as Preview;
